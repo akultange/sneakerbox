@@ -1,0 +1,285 @@
+[
+ {
+  "id": "superstar-blue",
+  "brand": "adidas",
+  "model": "Superstar",
+  "color": {
+   "ka": "თეთრი / ლურჯი",
+   "en": "White / Blue"
+  },
+  "price": 179,
+  "sizes": [
+   36,
+   37,
+   38,
+   39,
+   40,
+   41,
+   42,
+   43,
+   44,
+   45
+  ],
+  "soldOut": [
+   36,
+   44
+  ],
+  "photos": [
+   4,
+   5,
+   6,
+   7
+  ]
+ },
+ {
+  "id": "dunk-low",
+  "brand": "Nike",
+  "model": "Dunk Low",
+  "color": {
+   "ka": "თეთრი / შავი",
+   "en": "White / Black"
+  },
+  "price": 189,
+  "sizes": [
+   38,
+   39,
+   40,
+   41,
+   42,
+   43,
+   44,
+   45
+  ],
+  "soldOut": [
+   39
+  ],
+  "photos": [
+   1,
+   2,
+   3
+  ]
+ },
+ {
+  "id": "af1-pink",
+  "brand": "Nike",
+  "model": "Air Force 1",
+  "color": {
+   "ka": "კრემისფერი / ვარდისფერი",
+   "en": "Cream / Pink"
+  },
+  "price": 179,
+  "sizes": [
+   36,
+   37,
+   38,
+   39,
+   40,
+   41
+  ],
+  "soldOut": [
+   38
+  ],
+  "photos": [
+   11,
+   12,
+   13
+  ]
+ },
+ {
+  "id": "spezial-pink",
+  "brand": "adidas",
+  "model": "Handball Spezial",
+  "color": {
+   "ka": "ვარდისფერი",
+   "en": "Pink"
+  },
+  "price": 179,
+  "sizes": [
+   36,
+   37,
+   38,
+   39,
+   40,
+   41
+  ],
+  "soldOut": [
+   41
+  ],
+  "photos": [
+   128,
+   129,
+   130
+  ]
+ },
+ {
+  "id": "superstar-lilac",
+  "brand": "adidas",
+  "model": "Superstar",
+  "color": {
+   "ka": "თეთრი / იასამნისფერი",
+   "en": "White / Lilac"
+  },
+  "price": 179,
+  "sizes": [
+   36,
+   37,
+   38,
+   39,
+   40,
+   41
+  ],
+  "soldOut": [
+   40
+  ],
+  "photos": [
+   30,
+   31,
+   32,
+   33
+  ]
+ },
+ {
+  "id": "nb-530",
+  "brand": "New Balance",
+  "model": "530",
+  "color": {
+   "ka": "თეთრი / ვერცხლისფერი",
+   "en": "White / Silver"
+  },
+  "price": 189,
+  "sizes": [
+   37,
+   38,
+   39,
+   40,
+   41,
+   42,
+   43,
+   44,
+   45
+  ],
+  "soldOut": [
+   42,
+   45
+  ],
+  "photos": [
+   38,
+   39,
+   40,
+   41
+  ]
+ },
+ {
+  "id": "lacoste-black",
+  "brand": "Lacoste",
+  "model": null,
+  "color": {
+   "ka": "შავი / ყავისფერი ძირი",
+   "en": "Black / Gum sole"
+  },
+  "price": 189,
+  "sizes": [
+   39,
+   40,
+   41,
+   42,
+   43,
+   44,
+   45
+  ],
+  "soldOut": [
+   40
+  ],
+  "photos": [
+   116,
+   117,
+   118,
+   119
+  ]
+ },
+ {
+  "id": "superstar-red",
+  "brand": "adidas",
+  "model": "Superstar",
+  "color": {
+   "ka": "წითელი / შავი",
+   "en": "Red / Black"
+  },
+  "price": 179,
+  "sizes": [
+   38,
+   39,
+   40,
+   41,
+   42,
+   43,
+   44,
+   45
+  ],
+  "soldOut": [
+   41
+  ],
+  "photos": [
+   45,
+   46,
+   47,
+   48
+  ]
+ },
+ {
+  "id": "palermo",
+  "brand": "Puma",
+  "model": "Palermo",
+  "color": {
+   "ka": "ყავისფერი / ბეჟი",
+   "en": "Brown / Beige"
+  },
+  "price": 169,
+  "sizes": [
+   36,
+   37,
+   38,
+   39,
+   40,
+   41,
+   42,
+   43,
+   44
+  ],
+  "soldOut": [
+   37
+  ],
+  "photos": [
+   106,
+   107,
+   108,
+   109
+  ]
+ },
+ {
+  "id": "mary-jane",
+  "brand": "adidas",
+  "model": "Mary Jane",
+  "color": {
+   "ka": "თეთრი / ყავისფერი",
+   "en": "White / Brown"
+  },
+  "price": 179,
+  "sizes": [
+   36,
+   37,
+   38,
+   39,
+   40
+  ],
+  "soldOut": [
+   39
+  ],
+  "photos": [
+   124,
+   125,
+   126,
+   127
+  ]
+ }
+]

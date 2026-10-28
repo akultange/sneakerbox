@@ -1,0 +1,50 @@
+# Sneakerbox — light wall
+
+Spec demo for [Sneakerbox](https://www.facebook.com/sneakerboxonlineshop). Live at **https://akultange.github.io/sneakerbox/**
+
+The shop's own on-foot photos form a dark wall. Light follows the finger (or cursor) and shows the colour; tap a pair for its price, the sizes in stock and an order that opens in their Messenger with the text already written. Pick a size and only the pairs in stock in that size light up. Georgian first, with an English toggle.
+
+Prices are estimates from Tbilisi resellers and the sizes are placeholders until the shop sends its stock list.
+
+## How it's built
+
+- One WebGL2 canvas: the tile grid is drawn in a single fragment shader from a texture array, so the wall is one draw call at any size. A plain photo grid takes over where WebGL isn't available.
+- No framework. `src/app.js` is the whole app, `src/style.css` and `src/index.html` the page.
+- First screen ~110 KB (page, script, fonts, low-res wall); every tile sharp at ~630 KB. Sharp tiles load after the text has painted.
+
+```
+src/            index.html (template), style.css, app.js
+assets/
+  fonts/        Noto Sans Georgian (subset to Mkhedruli), Inter Tight, ₾ glyph
+  img/p/        pair photos, 480/720/1080, AVIF + WebP
+  img/t/        wall tiles, 160/320 WebP
+  img/brand/    wordmark and icons cut from the shop's logo
+  data/         catalog.json (generated)
+tools/
+  pairs.json         the stock list: pairs, prices, sizes, sold-out sizes, photo numbers
+  process_images.py  grades the photos and writes assets/ + catalog.json
+  build.py           writes dist/
+  og.js              renders the 1200×630 share image from the live wall
+  qa.js, qa-size.js  headless checks (touch, history, fallback, reduced motion, size filter)
+  shoot.js           phone + desktop screenshots
+```
+
+## Add or change a pair
+
+1. Name the photos `pNNN_anything.jpg` (the 1080 px squares from Facebook are fine) and put them in one folder.
+2. Add the pair to `tools/pairs.json`: `id`, `brand`, `model`, `color` (`ka` and `en`), `price`, `sizes`, `soldOut`, and `photos` (the NNN numbers).
+3. `python3 tools/process_images.py <photo folder>`
+4. `python3 tools/build.py https://akultange.github.io/sneakerbox/`
+5. Publish `dist/` to the `gh-pages` branch.
+
+## Work on it locally
+
+```
+npm install
+python3 tools/build.py
+python3 -m http.server 8765 --directory dist
+node tools/qa.js http://127.0.0.1:8765/ qa
+node tools/qa-size.js http://127.0.0.1:8765/ qa
+```
+
+The checks need Chromium: `@sparticuz/chromium` provides it.

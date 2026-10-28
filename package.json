@@ -1,0 +1,17 @@
+{
+  "name": "sneakerbox",
+  "version": "0.1.0",
+  "description": "Sneakerbox light wall: spec demo for sneakerboxonlineshop",
+  "scripts": {
+    "build": "python3 tools/build.py",
+    "qa": "node tools/qa.js && node tools/qa-size.js"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter-tight": "^5.3.0",
+    "@fontsource-variable/noto-sans-georgian": "^5.3.0",
+    "@sparticuz/chromium": "^153.0.0",
+    "esbuild": "^0.28.2",
+    "puppeteer-core": "^25.16.0"
+  },
+  "private": true
+}

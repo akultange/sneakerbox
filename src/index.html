@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ka">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sneakerbox • სნიკერბოქსი</title>
+<meta name="description" content="სნიკერების ონლაინ მაღაზია. რეალური წყვილები რეალურ ფოტოებზე. აირჩიე ზომა და შეუკვეთე Messenger-ში.">
+<meta name="theme-color" content="#1c1b19">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Sneakerbox • სნიკერბოქსი">
+<meta property="og:description" content="რეალური წყვილები რეალურ ფოტოებზე. აირჩიე ზომა და შეუკვეთე Messenger-ში.">
+<meta property="og:image" content="{{BASE}}assets/img/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="assets/img/brand/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="assets/img/brand/apple-touch-icon.png">
+<link rel="preload" href="assets/fonts/noto-sans-georgian.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/inter-tight.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/img/atlas-lo.webp" as="fetch" type="image/webp" crossorigin>
+<style>{{CSS}}</style>
+<script type="application/json" id="catalog">{{CATALOG}}</script>
+<script type="module" src="assets/app.js?v={{VERSION}}"></script>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#top" aria-label="Sneakerbox"><img src="assets/img/brand/wordmark.webp" width="757" height="106" alt="Sneakerbox"></a>
+  <span class="spec" title="Concept by Luka Skhiladze">SPEC</span>
+  <button class="top-link" id="lang" type="button">ENG</button>
+  <a class="top-link" id="msg-top" href="https://m.me/sneakerboxonlineshop" target="_blank" rel="noopener" aria-label="Messenger">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2C6.36 2 2 6.13 2 11.7c0 2.91 1.19 5.44 3.14 7.17.16.15.26.35.27.57l.05 1.78a.8.8 0 0 0 1.12.71l1.98-.88a.8.8 0 0 1 .53-.04c.91.25 1.87.38 2.91.38 5.64 0 10-4.13 10-9.7S17.64 2 12 2Zm6 7.46-2.94 4.66a1.5 1.5 0 0 1-2.17.4l-2.34-1.75a.6.6 0 0 0-.72 0l-3.16 2.4c-.42.32-.97-.18-.69-.63l2.94-4.66a1.5 1.5 0 0 1 2.17-.4l2.34 1.75a.6.6 0 0 0 .72 0l3.16-2.4c.42-.32.97.18.69.63Z"/></svg>
+  </a>
+</header>
+
+<main id="top">
+  <section class="wall" id="wall" aria-labelledby="wall-title">
+    <div class="wall-stage" id="stage"><canvas id="gl" aria-hidden="true"></canvas></div>
+    <div class="intro" id="intro">
+      <h1 id="wall-title"><span data-i18n="h1a">რეალური წყვილები.</span> <span data-i18n="h1b">რეალური ფოტოები.</span></h1>
+      <p id="hint" data-i18n="hint">თითი გადაატარე კედელს და სინათლე ფერს გაჩვენებს. შეეხე წყვილს, რომ ნახო ზომები და ფასი.</p>
+      <span class="count" id="count"></span>
+    </div>
+    <div class="fallback" id="fallback"></div>
+    <ul class="sr-only" id="pair-list"></ul>
+  </section>
+
+  <section class="how" aria-labelledby="how-title">
+    <h2 id="how-title" data-i18n="howTitle">როგორ შევუკვეთოთ</h2>
+    <ol>
+      <li data-i18n="how1">აირჩიე წყვილი კედელზე.</li>
+      <li data-i18n="how2">მონიშნე შენი ზომა.</li>
+      <li data-i18n="how3">გაგზავნე შეკვეთა Messenger-ში და დაგიდასტურებთ.</li>
+    </ol>
+  </section>
+</main>
+
+<footer>
+  <img src="assets/img/brand/wordmark.webp" width="757" height="106" alt="Sneakerbox">
+  <nav aria-label="Sneakerbox">
+    <a href="https://www.facebook.com/sneakerboxonlineshop" target="_blank" rel="noopener">Facebook</a>
+    <a href="https://m.me/sneakerboxonlineshop" target="_blank" rel="noopener">Messenger</a>
+  </nav>
+  <small data-i18n="demoNote">ფოტოები Sneakerbox-ის Facebook გვერდიდანაა. ფასები და ზომები სადემონსტრაციოა.</small>
+  <small data-i18n="credit">საიტის კონცეფცია: Luka Skhiladze</small>
+</footer>
+
+<nav class="filters" id="filters" aria-label="ბრენდები"></nav>
+<div class="size-pop" id="size-pop" role="dialog" aria-hidden="true" aria-label="შენი ზომა (EU)">
+  <div class="size-pop-head"><span id="size-pop-title">შენი ზომა (EU)</span><button type="button" id="size-clear" hidden>ყველა ზომა</button></div>
+  <div class="sizes" id="size-grid" role="group"></div>
+</div>
+<div class="tile-label" id="label" aria-hidden="true"></div>
+
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" aria-hidden="true">
+  <button class="sheet-close" id="sheet-close" type="button" aria-label="დახურვა" data-i18n-label="close">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+  </button>
+  <div class="gallery">
+    <div class="gallery-track" id="gallery"></div>
+    <span class="gallery-count" id="gallery-count"></span>
+  </div>
+  <div class="details">
+    <div class="maker" id="sheet-maker"></div>
+    <h2 id="sheet-title"></h2>
+    <p class="colorway" id="sheet-color"></p>
+    <div class="price-row"><span class="price" id="sheet-price"></span><span class="price-note" data-i18n="priceNote">სავარაუდო ფასი</span></div>
+    <div class="sizes-head"><span data-i18n="sizeTitle">ზომა (EU)</span><span id="size-picked"></span></div>
+    <div class="sizes" id="sizes" role="group" aria-label="ზომა (EU)"></div>
+    <a class="order" id="order" href="https://m.me/sneakerboxonlineshop" target="_blank" rel="noopener" aria-disabled="true">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2C6.36 2 2 6.13 2 11.7c0 2.91 1.19 5.44 3.14 7.17.16.15.26.35.27.57l.05 1.78a.8.8 0 0 0 1.12.71l1.98-.88a.8.8 0 0 1 .53-.04c.91.25 1.87.38 2.91.38 5.64 0 10-4.13 10-9.7S17.64 2 12 2Zm6 7.46-2.94 4.66a1.5 1.5 0 0 1-2.17.4l-2.34-1.75a.6.6 0 0 0-.72 0l-3.16 2.4c-.42.32-.97-.18-.69-.63l2.94-4.66a1.5 1.5 0 0 1 2.17-.4l2.34 1.75a.6.6 0 0 0 .72 0l3.16-2.4c.42-.32.97.18.69.63Z"/></svg>
+      <span data-i18n="order">შეკვეთა Messenger-ში</span>
+    </a>
+    <p class="order-hint" id="order-hint" data-i18n="pickSize">ჯერ აირჩიე ზომა.</p>
+    <a class="more" id="sheet-fb" href="https://www.facebook.com/sneakerboxonlineshop" target="_blank" rel="noopener" data-i18n="onFacebook">ეს წყვილი Facebook-ზე</a>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
