@@ -21,7 +21,10 @@ const ok = (name, pass, info = '') => results.push(`${pass ? 'PASS' : 'FAIL'}  $
     if (opts.noGL) await p.evaluateOnNewDocument(() => { const g = HTMLCanvasElement.prototype.getContext; HTMLCanvasElement.prototype.getContext = function (t, ...a) { return /webgl/.test(t) ? null : g.call(this, t, ...a); }; });
     if (opts.lang) await p.evaluateOnNewDocument(l => { try { localStorage.setItem('sb-lang', l); } catch {} }, opts.lang);
     await p.goto(opts.url || url, { waitUntil: 'networkidle0' });
-    await sleep(1200);
+    await sleep(400);
+    await p.keyboard.press('Shift');                    // skips the intro when it is playing
+    await p.waitForFunction(() => window.__sb && window.__sb.introDone, { timeout: 15000 });
+    await sleep(800);
     return p;
   };
   const sheetOpen = p => p.evaluate(() => document.querySelector('#sheet').classList.contains('open'));
@@ -32,7 +35,8 @@ const ok = (name, pass, info = '') => results.push(`${pass ? 'PASS' : 'FAIL'}  $
   const en = await p.evaluate(() => ({ lang: document.documentElement.lang, h1: document.querySelector('#wall-title').innerText.replace(/\n/g, ' | '), btn: document.querySelector('#lang').textContent, count: document.querySelector('#count').textContent, h1w: document.querySelector('#wall-title').scrollWidth, vw: innerWidth }));
   ok('lang toggle to English', en.lang === 'en' && /Real pairs/.test(en.h1), JSON.stringify(en));
   await p.screenshot({ path: `${out}/en-phone.png` });
-  await p.reload({ waitUntil: 'networkidle0' }); await sleep(600);
+  await p.reload({ waitUntil: 'networkidle0' }); await p.keyboard.press('Shift');
+  await p.waitForFunction(() => window.__sb && window.__sb.introDone, { timeout: 15000 }); await sleep(600);
   ok('language remembered after reload', await p.evaluate(() => document.documentElement.lang === 'en'));
   await p.click('#lang'); await sleep(200);
   ok('toggle back to Georgian', await p.evaluate(() => document.documentElement.lang === 'ka'));
@@ -94,7 +98,8 @@ const ok = (name, pass, info = '') => results.push(`${pass ? 'PASS' : 'FAIL'}  $
   // 6. Narrow phone 360
   p = await b.newPage();
   await p.setViewport({ width: 360, height: 740, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
-  await p.goto(url, { waitUntil: 'networkidle0' }); await sleep(1500);
+  await p.goto(url, { waitUntil: 'networkidle0' }); await p.keyboard.press('Shift');
+  await p.waitForFunction(() => window.__sb && window.__sb.introDone, { timeout: 15000 }); await sleep(800);
   const fit = await p.evaluate(() => [...document.querySelectorAll('#wall-title span')].map(s => Math.round(s.getBoundingClientRect().right)));
   ok('360px phone: headline fits', fit.every(r => r <= 360 - 8), JSON.stringify(fit));
   await p.screenshot({ path: `${out}/phone-360.png` });

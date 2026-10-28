@@ -91,26 +91,144 @@ a { color: inherit; }
 .wall canvas.over-tile { cursor: pointer; }
 html.no-gl .wall canvas { display: none; }
 
+html { scrollbar-gutter: stable; }   /* the intro hides the scrollbar; keep the layout from jumping when it returns */
+
+/* the first screen over the wall: the box on its three slots and the text under it
+   (both placed by the script on the wall's own grid) */
 .intro {
   position: absolute; left: 0; right: 0; top: 0; z-index: 5;
   height: 100vh; height: 100svh;
-  display: flex; flex-direction: column; justify-content: flex-end;
-  padding: 0 var(--pad) calc(84px + env(safe-area-inset-bottom));
-  pointer-events: none;
+  pointer-events: none; visibility: hidden;
+  overflow: hidden;                  /* the lid's glow must not widen the page on phones */
 }
+html.laid .intro, html.intro .title-box { visibility: visible; }
 .intro::before {
   content: ''; position: absolute; inset: 0; z-index: -1;
-  background: linear-gradient(to bottom, rgba(28, 27, 25, 0) 46%, rgba(28, 27, 25, .7) 76%, rgba(28, 27, 25, .88));
+  background: linear-gradient(to bottom, rgba(28, 27, 25, 0) 50%, rgba(28, 27, 25, .7) 78%, rgba(28, 27, 25, .9));
 }
-.intro h1 {
-  margin: 0 0 14px;
-  font: 900 clamp(30px, 9.4vw, 88px)/.96 var(--ka);
-  font-stretch: 64%;
-  letter-spacing: -.01em;
+.intro-text { position: absolute; left: var(--pad); right: var(--pad); }
+
+/* ---- the title box ---------------------------------------------------------
+   Their box, built in CSS 3D: the creased red paper and the cream wordmark are
+   cut from the shop's own logo, and the headline is printed on its long side.
+   It fills exactly three slots of the wall. The sizes below repeat the wall's
+   grid in CSS, so the box draws at its right size before any script runs. */
+.title-box {
+  --bw: calc(100vw - 16px);                                /* 3 columns: the whole row */
+  --bh: calc((100vw - 28px) / 3);                          /* one tile high */
+  --bd: calc(var(--bw) * .55);                             /* depth, a shoebox's proportions */
+  --lh: calc(var(--bh) * .27);                             /* lid lip */
+  --lo: 3px;                                               /* lid overhang */
+  --tpad: calc(var(--bh) * .17);
+  --ls: .78;                                               /* loader scale */
+  position: absolute; left: var(--tbx, var(--pad)); top: var(--tby, 0px);
+  width: var(--bw); height: var(--bh);
+}
+html.no-gl .intro { position: relative; height: auto; padding: 92px var(--pad) 24px; visibility: visible; }
+html.no-gl .title-box { position: relative; left: 0; top: 0; }
+html.no-gl .intro-text { position: relative; left: 0; right: 0; margin-top: 22px; }
+@media (min-width: 520px) { .title-box { --bw: calc((100vw - 78px) * .75 + 20px); --bh: calc((100vw - 78px) / 4); } }
+@media (min-width: 900px) { .title-box { --bw: calc((100vw - 98px) / 2 + 20px); --bh: calc((100vw - 98px) / 6); --ls: .62; } }
+@media (min-width: 1340px) { .title-box { --bw: calc((100vw - 108px) * 3 / 7 + 20px); --bh: calc((100vw - 108px) / 7); } }
+.tb-fly { position: absolute; inset: 0; transform-origin: 0 0; }
+.tb-persp { position: absolute; inset: 0; perspective: 1500px; perspective-origin: 50% 35%; }
+.tb-obj {
+  position: absolute; left: 50%; top: 50%; width: 0; height: 0;
+  transform-style: preserve-3d;
+  /* at rest it faces you, flush in its slot; pushed back half its depth so the
+     front face lands on the slot at true size */
+  transform: translateZ(calc(var(--bd) / -2)) rotateX(0deg) rotateY(0deg);
+}
+.tb-face {
+  position: absolute; left: calc(var(--fw) / -2); top: calc(var(--fh) / -2);
+  width: var(--fw); height: var(--fh); box-sizing: border-box;
+  backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  background: #841919 url(assets/img/brand/paper.webp) 0 0 / calc(var(--bw) * 1.5) auto;
+}
+.tb-face::after { content: ''; position: absolute; inset: 0; z-index: 1; background: var(--shade, none); pointer-events: none; }
+.tb-front, .tb-back { --fw: var(--bw); --fh: var(--bh); }
+.tb-left, .tb-right { --fw: var(--bd); --fh: var(--bh); }
+.tb-bottom, .tb-inside { --fw: var(--bw); --fh: var(--bd); }
+.tb-front { transform: translateZ(calc(var(--bd) / 2)); background-position: -30px -40px; --shade: linear-gradient(rgba(0, 0, 0, .14), rgba(0, 0, 0, 0) 42%, rgba(0, 0, 0, .22)); }
+.tb-back { transform: rotateY(180deg) translateZ(calc(var(--bd) / 2)); --shade: rgba(0, 0, 0, .46); }
+.tb-right { transform: rotateY(90deg) translateZ(calc(var(--bw) / 2)); background-position: -260px -10px; --shade: linear-gradient(90deg, rgba(0, 0, 0, .3), rgba(0, 0, 0, .5)); }
+.tb-left { transform: rotateY(-90deg) translateZ(calc(var(--bw) / 2)); --shade: rgba(0, 0, 0, .42); }
+.tb-bottom { transform: rotateX(-90deg) translateZ(calc(var(--bh) / 2)); --shade: rgba(0, 0, 0, .62); }
+.tb-inside { transform: rotateX(90deg) translateZ(calc(var(--bh) / 2 - 2px)); background: #2a0808; }
+.tb-glow { position: absolute; inset: 0; z-index: 2; opacity: 0; background: radial-gradient(56% 62% at 50% 55%, rgba(255, 242, 204, .96), rgba(255, 210, 150, .38) 46%, rgba(42, 8, 8, 0) 76%); }
+
+.tb-lid {
+  --lw: calc(var(--bw) + 2 * var(--lo)); --ld: calc(var(--bd) + 2 * var(--lo));
+  position: absolute; left: 0; top: 0; width: 0; height: 0;
+  transform-style: preserve-3d;
+  transform: translateY(calc(var(--bh) / -2));
+}
+.lid-top { --fw: var(--lw); --fh: var(--ld); transform: rotateX(90deg) translateZ(var(--lo)); background-position: -120px -60px; --shade: linear-gradient(rgba(255, 255, 255, .1), rgba(255, 255, 255, .02)); }
+.lid-under { --fw: var(--lw); --fh: var(--ld); transform: rotateX(-90deg) translateZ(calc(var(--lo) * -1 + 1px)); background: #3b0d0d; --shade: linear-gradient(rgba(0, 0, 0, .35), rgba(0, 0, 0, .1)); }
+.lid-front, .lid-back { --fw: var(--lw); --fh: var(--lh); }
+.lid-left, .lid-right { --fw: var(--ld); --fh: var(--lh); }
+.lid-front {
+  transform: translateY(calc(var(--lh) / 2 - var(--lo))) translateZ(calc(var(--ld) / 2));
+  display: flex; align-items: center; padding-left: calc(var(--tpad) + var(--lo));
+  background-position: -30px -12px;
+  --shade: linear-gradient(rgba(255, 255, 255, .07), rgba(0, 0, 0, .12));
+  box-shadow: 0 2px 3px rgba(40, 0, 0, .45);
+}
+.lid-front img { position: relative; z-index: 2; width: auto; height: calc(var(--lh) * .34); }
+.lid-back { transform: translateY(calc(var(--lh) / 2 - var(--lo))) rotateY(180deg) translateZ(calc(var(--ld) / 2)); --shade: rgba(0, 0, 0, .42); }
+.lid-right { transform: translateY(calc(var(--lh) / 2 - var(--lo))) rotateY(90deg) translateZ(calc(var(--lw) / 2)); background-position: -200px -30px; --shade: rgba(0, 0, 0, .4); }
+.lid-left { transform: translateY(calc(var(--lh) / 2 - var(--lo))) rotateY(-90deg) translateZ(calc(var(--lw) / 2)); --shade: rgba(0, 0, 0, .4); }
+
+/* the headline, printed on the box in the logo's cream */
+.tb-front h1 {
+  position: absolute; z-index: 2; left: var(--tpad); right: var(--tpad); top: var(--lh); bottom: 0;
+  margin: 0; display: flex; flex-direction: column; justify-content: center;
+  font: 900 min(calc((var(--bw) - 2 * var(--tpad)) * .1045), calc((var(--bh) - var(--lh)) * .4))/.95 var(--ka);
+  font-stretch: 64%; letter-spacing: -.005em;
   color: var(--cream);
+  text-shadow: 0 1px 1px rgba(60, 0, 0, .35);
 }
-.intro h1 span { display: block; white-space: nowrap; }
-html[lang='en'] .intro h1 { font-family: var(--sans); font-weight: 800; letter-spacing: -.03em; font-size: clamp(38px, 12.5vw, 88px); }
+.tb-front h1 span { display: block; white-space: nowrap; }
+html[lang='en'] .tb-front h1 {
+  font-family: var(--sans); font-weight: 800; letter-spacing: -.03em;
+  font-size: min(calc((var(--bw) - 2 * var(--tpad)) * .17), calc((var(--bh) - var(--lh)) * .4));
+}
+/* the wall's light falls on the box too */
+.tb-light {
+  position: absolute; inset: 0; z-index: 1; pointer-events: none; mix-blend-mode: screen;
+  background: radial-gradient(circle at var(--lx, -999px) var(--ly, -999px), rgba(255, 232, 190, var(--lk, 0)), rgba(255, 232, 190, 0) calc(var(--bw) * .6));
+}
+.tb-shadow { position: absolute; left: 4%; right: 4%; top: 78%; height: 50%; pointer-events: none; opacity: 0; background: radial-gradient(closest-side, rgba(0, 0, 0, .66), rgba(0, 0, 0, 0)); }
+html.intro .tb-shadow { opacity: 1; }
+.tb-spill { position: absolute; left: -10%; right: -10%; top: -95%; height: 150%; pointer-events: none; opacity: 0; mix-blend-mode: screen; background: radial-gradient(46% 52% at 50% 74%, rgba(255, 238, 200, .5), rgba(255, 238, 200, 0)); }
+
+/* the loader: a hairline and a photo count under the spinning box */
+.tb-load {
+  position: absolute; left: 50%; top: calc(50% + var(--bh) * var(--ls) * .5 + 52px);
+  transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 10px;
+  opacity: 0; pointer-events: none; transition: opacity 200ms linear;
+}
+.tb-load i { display: block; width: 96px; height: 1px; overflow: hidden; background: rgba(233, 229, 218, .16); }
+.tb-load b { display: block; height: 100%; background: var(--cream); transform-origin: 0 0; transform: scaleX(0); transition: transform 260ms var(--ease-out); }
+.tb-load span { font: 500 12px/1 var(--sans); color: var(--dust); font-variant-numeric: tabular-nums; letter-spacing: .04em; min-height: 12px; }
+
+/* intro: the box spins in the middle while the photos arrive; everything else waits */
+html.intro, html.intro body { overflow: hidden; }
+html.intro .title-box { position: fixed; z-index: 70; margin: 0; left: calc(50% - var(--bw) / 2); top: calc(44% - var(--bh) / 2); }
+html.intro .tb-fly { transform-origin: 50% 50%; transform: scale(var(--ls)); }
+html.intro .tb-obj { animation: tb-spin 2.8s linear infinite; }
+html.intro .tb-load { opacity: 1; }
+html.intro .wall-stage, html.intro .top, html.intro .intro-text, html.intro .intro::before, html.intro .fallback { opacity: 0; }
+html.intro .filters { opacity: 0; transform: translateY(100%); }
+@keyframes tb-spin { from { transform: translateZ(calc(var(--bd) / -2)) rotateX(-20deg) rotateY(0deg); } to { transform: translateZ(calc(var(--bd) / -2)) rotateX(-20deg) rotateY(360deg); } }
+html.intro .tile-label { opacity: 0 !important; }
+/* the reveal, while the box flies into place */
+html.revealing .wall-stage { transition: opacity 1000ms linear 80ms; }
+html.revealing .intro::before { transition: opacity 800ms linear 300ms; }
+html.revealing .top { transition: opacity 500ms linear 700ms; }
+html.revealing .intro-text { transition: opacity 500ms linear 860ms; }
+html.revealing .tb-load { opacity: 0; transition: none; }
+html.revealing .filters { transition: transform 600ms var(--ease-out) 860ms, opacity 400ms linear 860ms; }
 .intro p {
   margin: 0; max-width: 34ch;
   font-size: 16px; line-height: 1.55; color: var(--paper);
@@ -152,6 +270,7 @@ html:not([lang='en']) .intro .count { font-family: var(--ka); }
 }
 html:not([lang='en']) .chip[data-brand='all'], html:not([lang='en']) .size-chip { font-family: var(--ka); font-weight: 500; }
 .chip[aria-pressed='true'] { background: var(--cream); color: var(--asphalt); border-color: var(--cream); }
+.chip:disabled { opacity: .32; cursor: default; }
 /* the size chip leads the row and opens the size grid */
 .size-chip { display: inline-flex; align-items: center; gap: 6px; margin-right: 4px; border-color: rgba(255, 255, 193, .45); }
 .size-chip[aria-pressed='true'] { background: var(--box-red); border-color: var(--box-red); color: var(--cream); }
@@ -279,8 +398,7 @@ html.no-gl .fallback button:hover img, html.no-gl .fallback button:focus-visible
 @media (min-width: 760px) {
   :root { --pad: 28px; }
   .brand img { width: 156px; }
-  .intro h1, html[lang='en'] .intro h1 { font-size: clamp(56px, 6vw, 92px); }
-  .intro p { font-size: 18px; }
+  .intro p { font-size: 17px; max-width: 52ch; }
   .how { padding-top: 96px; }
   .how h2 { font-size: 46px; }
   html.no-gl .fallback { grid-template-columns: repeat(6, 1fr); gap: 10px; padding: 0 24px; }

@@ -28,13 +28,15 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     try { await cdp0.send('Emulation.setEmulatedMedia', { features: [{ name: 'hover', value: dev.touch ? 'none' : 'hover' }, { name: 'pointer', value: dev.touch ? 'coarse' : 'fine' }] }); } catch (e) { log.push(`[${dev.name}] media emulation: ${e.message}`); }
     await page.setViewport({ width: dev.width, height: dev.height, deviceScaleFactor: dev.dpr, isMobile: dev.touch, hasTouch: dev.touch });
     await page.goto(url, { waitUntil: 'networkidle0' });
+    await page.keyboard.press('Shift');
+    await page.waitForFunction(() => window.__sb && window.__sb.introDone, { timeout: 15000 });
     await sleep(2500);
     const gl = await page.evaluate(() => document.documentElement.classList.contains('no-gl') ? 'fallback' : 'webgl');
     log.push(`[${dev.name}] mode: ${gl}`);
     await page.screenshot({ path: `${out}/${dev.name}-1-attract.png` });
 
     // light over a pair (mouse) or finger resting on it (touch)
-    const c = await page.evaluate(() => { const r = window.__sb.cellRect(window.__sb.L.cols + 1); return { x: Math.round(r.x + r.w / 2), y: Math.round(r.y + r.h / 2) }; });
+    const c = await page.evaluate(() => { const { L, cells, HOLE, cellRect } = window.__sb; for (let i = L.cols; i < L.count; i++) if (cells[i] !== HOLE) { const r = cellRect(i); if (r.y > 70 && r.y + r.h < innerHeight - 220) return { x: Math.round(r.x + r.w / 2), y: Math.round(r.y + r.h / 2) }; } });
     const x = c.x, y = c.y;
     if (dev.touch) {
       const cdp = await page.target().createCDPSession();

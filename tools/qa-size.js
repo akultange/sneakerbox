@@ -10,7 +10,8 @@ const res = []; const ok = (n, p, i = '') => res.push(`${p ? 'PASS' : 'FAIL'}  $
   const p = await b.newPage();
   p.on('pageerror', e => errors.push(e.message));
   await p.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
-  await p.goto(url, { waitUntil: 'networkidle0' }); await sleep(1500);
+  await p.goto(url, { waitUntil: 'networkidle0' }); await p.keyboard.press('Shift');
+  await p.waitForFunction(() => window.__sb && window.__sb.introDone, { timeout: 15000 }); await sleep(800);
   await p.tap('#size-chip'); await sleep(400);
   const pop = await p.evaluate(() => ({ open: document.querySelector('#size-pop').classList.contains('open'), n: document.querySelectorAll('#size-grid .size').length, disabled: [...document.querySelectorAll('#size-grid .size:disabled')].map(b => b.textContent), exp: document.querySelector('#size-chip').getAttribute('aria-expanded') }));
   ok('size chip opens the size grid', pop.open && pop.n >= 10 && pop.exp === 'true', JSON.stringify(pop));
@@ -22,8 +23,10 @@ const res = []; const ok = (n, p, i = '') => res.push(`${p ? 'PASS' : 'FAIL'}  $
     const { S, L } = window.__sb; const cat = JSON.parse(document.querySelector('#catalog').textContent);
     const pairs = new Map(cat.pairs.map(p => [p.id, p]));
     let litOk = true, lit = 0;
+    const { cells, HOLE } = window.__sb;
     for (let i = 0; i < L.count; i++) {
-      const pr = pairs.get(cat.photos[i % cat.photos.length].pair);
+      if (cells[i] === HOLE) { if (S.filtT[i] === 1) litOk = false; continue; }
+      const pr = pairs.get(cat.photos[cells[i]].pair);
       const has = pr.sizes.includes(40) && !pr.soldOut.includes(40);
       if ((S.filtT[i] === 1) !== has) litOk = false;
       if (S.filtT[i] === 1) lit++;

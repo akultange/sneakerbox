@@ -112,9 +112,11 @@ function applyLang() {
 
 // ---------------------------------------------------------------- layout
 const wall = $('#wall'), stage = $('#stage'), canvas = $('#gl');
-const label = $('#label'), intro = $('#intro');
-const L = { w: 0, h: 0, cols: 3, gap: 6, pad: 8, tile: 100, step: 106, top: 64, rows: 0, height: 0 };
-let cells = new Uint16Array(0);                         // cell -> photo layer
+const label = $('#label'), intro = $('#intro'), introText = $('#intro-text');
+const titleBox = $('#title-box');
+const L = { w: 0, h: 0, cols: 3, gap: 6, pad: 8, tile: 100, step: 106, top: 64, rows: 0, height: 0, hole: null };
+const HOLE = 0xFFFF;                                    // a cell the box takes
+let cells = new Uint16Array(0);                         // cell -> photo layer, or HOLE
 
 function layout() {
   const w = stage.clientWidth, h = stage.clientHeight;
@@ -122,14 +124,34 @@ function layout() {
   const gap = w < 520 ? 6 : 10, pad = w < 520 ? 8 : 24;
   const tile = (w - pad * 2 - gap * (cols - 1)) / cols;
   const step = tile + gap, top = w < 520 ? 60 : 76;
+  // The box has its own place on the wall: three slots, the second row on wide
+  // screens; on phones the lowest full row that leaves room for the hint below it.
+  const holeCols = Math.min(3, cols);
+  const holeRow = cols === 3 ? Math.max(1, Math.floor((h - 290 - top) / step)) : 1;
   const minRows = Math.ceil((h * 1.45 - top) / step);
-  const rows = Math.max(Math.ceil(photos.length / cols), minRows);
+  const rows = Math.max(Math.ceil((photos.length + holeCols) / cols), minRows, holeRow + 2);
   const count = Math.min(rows * cols, MAX_CELLS);
   cells = new Uint16Array(count);
-  for (let i = 0; i < count; i++) cells[i] = i % photos.length;
+  for (let i = 0, k = 0; i < count; i++) {
+    const inHole = Math.floor(i / cols) === holeRow && i % cols < holeCols;
+    cells[i] = inHole ? HOLE : k++ % photos.length;
+  }
   const height = Math.max(top + Math.ceil(count / cols) * step - gap + Math.round(h * 0.18), h);
-  Object.assign(L, { w, h, cols, gap, pad, tile, step, top, rows: Math.ceil(count / cols), height, count });
+  const hole = { row: holeRow, cols: holeCols, x: pad, y: top + holeRow * step, w: holeCols * tile + (holeCols - 1) * gap, h: tile };
+  Object.assign(L, { w, h, cols, gap, pad, tile, step, top, rows: Math.ceil(count / cols), height, count, hole });
   wall.style.height = height + 'px';
+  placeBox();
+}
+
+// the box and the text under it sit exactly on the slots the wall left free
+function placeBox() {
+  const H = L.hole;
+  titleBox.style.setProperty('--tbx', H.x + 'px');
+  titleBox.style.setProperty('--tby', H.y + 'px');
+  titleBox.style.setProperty('--bw', H.w + 'px');
+  titleBox.style.setProperty('--bh', H.h + 'px');
+  introText.style.top = Math.round(H.y + H.h + (L.cols === 3 ? 18 : 22)) + 'px';
+  html.classList.add('laid');
 }
 
 // cell geometry in viewport pixels
@@ -144,7 +166,7 @@ function cellAt(vx, vy) {          // viewport coords -> cell index or -1
   const col = Math.floor(x / L.step), row = Math.floor(y / L.step);
   if (col >= L.cols || x - col * L.step > L.tile || y - row * L.step > L.tile) return -1;
   const i = row * L.cols + col;
-  return i < L.count ? i : -1;
+  return i < L.count && cells[i] !== HOLE ? i : -1;
 }
 
 // ---------------------------------------------------------------- state
@@ -196,13 +218,13 @@ void main(){
   vec2 cell = floor(pos / stepPx);
   vec2 local = pos - cell * stepPx;
   float idx = cell.y * cols + cell.x;
+  vec4 meta = texelFetch(uMeta, ivec2(int(clamp(idx, 0.0, 255.0)), 0), 0);
   bool inside = pos.x >= 0.0 && pos.y >= 0.0 && cell.x < cols && local.x <= tile && local.y <= tile
-                && idx < uView.x && abs(idx - uHide) > 0.5;
+                && idx < uView.x && abs(idx - uHide) > 0.5 && meta.a < 0.5;   // meta.a: the box's slots
 
   float d = distance(frag, uLight.xy);
   float lightF = uLightK * (1.0 - smoothstep(uLight.z * 0.16, uLight.z, d));
 
-  vec4 meta = texelFetch(uMeta, ivec2(int(clamp(idx, 0.0, 255.0)), 0), 0);
   float layer = floor(meta.r * 255.0 + 0.5);
   float hov = abs(idx - uHover) < 0.5 ? uHoverK : 0.0;
   vec2 uv = (local / tile - 0.5) / (1.0 + 0.04 * hov) + 0.5;
@@ -296,12 +318,15 @@ async function loadTextures() {
     loReady = true;
     invalidate();
   } catch {}
-  // Full-res tiles wait until the text has painted, so they don't compete with the
-  // fonts on a slow connection; the low-res wall above is already on screen.
-  await Promise.all([document.fonts.ready, document.readyState === 'complete' ? 0 : new Promise(r => addEventListener('load', r, { once: true }))]);
-  await new Promise(r => window.requestIdleCallback ? requestIdleCallback(r, { timeout: 400 }) : setTimeout(r, 120));
+  if (introDone) {
+    // No intro: sharp tiles wait until the text has painted, so they don't compete
+    // with the fonts on a slow connection; the low-res wall is already on screen.
+    await Promise.all([document.fonts.ready, document.readyState === 'complete' ? 0 : new Promise(r => addEventListener('load', r, { once: true }))]);
+    await new Promise(r => window.requestIdleCallback ? requestIdleCallback(r, { timeout: 400 }) : setTimeout(r, 120));
+  }
+  // (during the intro the box covers the page, so they load straight away and the wall opens sharp)
   // in wall order so the first screen sharpens first
-  let next = 0, pendingMips = 0, mipTimer = 0;
+  let next = 0, pendingMips = 0, mipTimer = 0, loaded = 0;
   const flushMips = () => {
     mipTimer = 0; pendingMips = 0;
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D_ARRAY, texHi);
@@ -318,6 +343,7 @@ async function loadTextures() {
         gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, i, 320, 320, 1, gl.RGBA, gl.UNSIGNED_BYTE, bmp);
         bmp.close && bmp.close();
         S.hiReady[i] = 1; pendingMips++;
+        introProgress(++loaded);
         if (!mipTimer) mipTimer = setTimeout(flushMips, 120);
       } catch {}
     }
@@ -337,10 +363,11 @@ function resize() {
 function draw() {
   if (!gl) return;
   for (let i = 0; i < L.count; i++) {
-    const layer = cells[i];
+    const hole = cells[i] === HOLE, layer = hole ? 0 : cells[i];
     metaBuf[i * 4] = layer;
     metaBuf[i * 4 + 1] = Math.round(S.filt[i] * 255);
     metaBuf[i * 4 + 2] = S.hiReady[layer] === 2 ? 255 : 0;
+    metaBuf[i * 4 + 3] = hole ? 255 : 0;
   }
   gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, texMeta);
   gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, MAX_CELLS, 1, gl.RGBA, gl.UNSIGNED_BYTE, metaBuf);
@@ -370,18 +397,18 @@ function frame(now) {
   last = now;
   let moving = false;
 
-  const idle = !sheetPair && now - S.lastInput > 5000;
+  const idle = introDone && !sheetPair && now - S.lastInput > 5000;
   if (idle && reduced) {
     // reduced motion: no drift, a still light over the upper wall so the colour still shows
     S.mode = 'idle';
-    const band = introTop() - 40;
+    const band = driftBottom();
     S.tx = S.lx = L.w * 0.5;
-    S.ty = S.ly = L.top + (band - L.top) * 0.45 - S.stageTop;
+    S.ty = S.ly = L.top + (band - L.top) * 0.4 - S.stageTop;
     S.tk = 1;
   } else if (idle) {
     S.mode = 'idle';
     const s = now / 1000;
-    const band = introTop() - 40;                      // keep the drift above the headline
+    const band = driftBottom();                        // the wall above the text, the box included
     S.tx = L.w * (0.5 + 0.36 * Math.sin(s * 0.31 + 0.6));
     S.ty = L.top + (band - L.top) * (0.5 + 0.42 * Math.sin(s * 0.47 + 1.9)) - S.stageTop;
     S.tk = 1;
@@ -411,20 +438,37 @@ function frame(now) {
   if (Math.abs(S.hoverK - targetHover) > 0.01) moving = true;
 
   placeLabel();
+  lightBox();
   draw();
   if (moving || px !== S.lx) invalidate();
 }
 
-function introTop() {
-  const r = $('#wall-title').getBoundingClientRect();
-  if (r.bottom <= 0) return L.h;                       // headline scrolled away: roam the whole view
-  return Math.max(L.top + L.tile, Math.min(r.top, L.h));
+function driftBottom() {
+  const r = titleBox.getBoundingClientRect();
+  if (r.bottom <= L.top + L.tile) return L.h;          // box scrolled away: roam the whole view
+  return Math.max(L.top + L.tile, Math.min(r.bottom, L.h));
+}
+
+// The wall's light falls on the box as it passes: a soft highlight on its face.
+const tbFront = $('.tb-front');
+let boxLit = 0;
+function lightBox() {
+  if (!introDone || html.classList.contains('no-gl')) return;
+  const r = titleBox.getBoundingClientRect();
+  const lx = S.lx, ly = S.ly + S.stageTop;
+  const dx = lx - Math.min(Math.max(lx, r.left), r.right), dy = ly - Math.min(Math.max(ly, r.top), r.bottom);
+  const k = S.k * Math.max(0, 1 - Math.hypot(dx, dy) / (r.height * 1.6)) * 0.34;
+  if (k < 0.004 && boxLit < 0.004) return;
+  boxLit = k;
+  tbFront.style.setProperty('--lx', Math.round(lx - r.left) + 'px');
+  tbFront.style.setProperty('--ly', Math.round(ly - r.top) + 'px');
+  tbFront.style.setProperty('--lk', k.toFixed(3));
 }
 
 // ---------------------------------------------------------------- label
 let labelFor = -1;
 function placeLabel() {
-  const show = S.hover >= 0 && S.hoverK > 0.35 && S.k > 0.4;
+  const show = introLanded && S.hover >= 0 && S.hoverK > 0.35 && S.k > 0.4;
   if (!show) { label.classList.remove('on'); return; }
   const cell = S.hover, photo = photos[cells[cell]], pair = pairs.get(photo.pair);
   if (labelFor !== cell) {
@@ -480,6 +524,7 @@ canvas.addEventListener('pointerup', e => {
 
 // touch: the light follows the finger, even while the page scrolls
 function touchLight(x, y, jump) {
+  if (!introDone) return;
   S.mode = 'touch'; S.input = true; S.lastInput = performance.now();
   S.tx = x; S.ty = y - S.stageTop; S.tk = 1;
   if (jump) { S.lx = S.tx; S.ly = S.ty; }
@@ -527,6 +572,8 @@ function renderFilters() {
     chip.type = 'button'; chip.className = 'chip'; chip.dataset.brand = b;
     chip.textContent = b === 'all' ? t('all') : b;
     chip.setAttribute('aria-pressed', String(S.filter === b));
+    // with a size picked, a brand that has nothing in it can't be chosen: no dark dead end
+    chip.disabled = b !== 'all' && S.size != null && !catalog.pairs.some(p => p.brand === b && inStock(p, S.size));
     chip.addEventListener('click', () => applyFilter(b));
     filters.append(chip);
   }
@@ -541,7 +588,7 @@ function renderSizePop() {
   sizePop.setAttribute('aria-label', t('sizePopTitle'));
   const grid = $('#size-grid'); grid.innerHTML = '';
   for (const s of allSizes) {
-    const n = catalog.pairs.filter(p => inStock(p, s)).length;
+    const n = catalog.pairs.filter(p => inStock(p, s) && (S.filter === 'all' || p.brand === S.filter)).length;
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'size'; b.textContent = s;
     b.disabled = n === 0;
@@ -579,7 +626,7 @@ function applyFilter(b, instant = false) {
   S.filter = b;
   const active = b !== 'all' || S.size != null;
   for (let i = 0; i < MAX_CELLS; i++) {
-    const on = active && i < L.count && matches(pairs.get(photos[cells[i]].pair));
+    const on = active && i < L.count && cells[i] !== HOLE && matches(pairs.get(photos[cells[i]].pair));
     S.filtT[i] = on ? 1 : 0;
     if (instant || reduced) S.filt[i] = S.filtT[i];
   }
@@ -618,7 +665,7 @@ function renderPairList() {
     li.append(b); ul.append(li);
   }
 }
-const firstCellOf = id => { for (let i = 0; i < L.count; i++) if (photos[cells[i]].pair === id) return i; return -1; };
+const firstCellOf = id => { for (let i = 0; i < L.count; i++) if (cells[i] !== HOLE && photos[cells[i]].pair === id) return i; return -1; };
 const isCellVisible = i => { const r = cellRect(i); return r.y > 40 && r.y + r.h < innerHeight - 40; };
 
 // ---------------------------------------------------------------- product sheet
@@ -826,10 +873,134 @@ function buildFallback() {
   });
   wall.style.height = 'auto';
   $('.wall-stage').style.display = 'none';
-  intro.style.position = 'relative'; intro.style.height = 'auto'; intro.style.padding = '96px var(--pad) 24px';
+  ['--tbx', '--tby', '--bw', '--bh'].forEach(v => titleBox.style.removeProperty(v));   // the plain layout in CSS takes over
+  introText.style.top = '';
+  html.classList.add('laid');
 }
 
 // ---------------------------------------------------------------- start
+// ---------------------------------------------------------------- intro: the box
+// While the photos load, the shop's box turns in the middle of a dark screen with a
+// count under it. Once they're in, it slows to face you, the lid lifts and light
+// spills out; then it slides into its three slots on the wall, flush with the photos,
+// and the light it held drifts out across them. A tap or a key skips it.
+let introDone = !html.classList.contains('intro');
+let introLanded = introDone;                           // pair labels wait until the box has landed
+let introSkip = false, introLoaded = 0;
+const introAnims = [], introWaits = [];
+const tbFly = $('#tb-fly'), tbObj = $('#tb-obj'), tbLid = $('#tb-lid');
+const SPIN_MS = 2800;                                  // one turn of the loader (matches the CSS)
+
+function introProgress(n) {
+  introLoaded = n;
+  if (introDone) return;
+  $('#tb-count').textContent = `${n} / ${photos.length}`;
+  $('#tb-bar').style.transform = `scaleX(${n / photos.length})`;
+}
+
+const introWait = ms => new Promise(r => {
+  if (introSkip) return r();
+  const t = setTimeout(r, ms);
+  introWaits.push(() => { clearTimeout(t); r(); });
+});
+
+// ready = fonts in, the photos in (or 3.4 s passed with the low-res wall ready), and the box shown ~1 s
+function introGate() {
+  return new Promise(resolve => {
+    const tick = () => {
+      const t = performance.now();
+      const fontsOk = document.fonts.check('900 20px "Noto Sans Georgian"', 'რ') && document.fonts.check('800 20px "Inter Tight"', 'R');
+      const photosOk = !gl || introLoaded >= photos.length || (loReady && t > 3400);
+      if (introSkip || (fontsOk && photosOk && t > 1000) || t > 6500) return resolve();
+      setTimeout(tick, 60);
+    };
+    tick();
+  });
+}
+
+function skipIntro() {
+  introSkip = true;
+  introWaits.splice(0).forEach(f => f());
+  introAnims.forEach(a => a.finish());
+}
+addEventListener('pointerdown', e => { if (!introDone) { e.stopPropagation(); skipIntro(); } }, true);
+addEventListener('keydown', () => { if (!introDone) skipIntro(); }, true);
+
+async function playIntro() {
+  if (introDone) return;
+  clearTimeout(window.__introFailsafe);
+  introProgress(introLoaded);
+  await introGate();
+  if (introDone) return;
+
+  const b = { h: tbFly.offsetHeight, d: $('.tb-right').offsetWidth };
+  const objT = (x, y) => `translateZ(${-b.d / 2}px) rotateX(${x}deg) rotateY(${y}deg)`;
+  // the lid lifts straight up and tips back a little, wordmark still facing you
+  const lidT = (lift, tilt) => `translateY(${-b.h / 2 - lift}px) rotateX(${tilt}deg)`;
+  const LIFT = Math.round(b.h * 0.5);
+  const run = (el, keyframes, opts) => {
+    const a = el.animate(keyframes, { fill: 'forwards', ...opts });
+    introAnims.push(a);
+    if (introSkip) a.finish();
+    return a;
+  };
+
+  // 1. catch the spin where it is
+  const spin = tbObj.getAnimations()[0];
+  const ang = spin && spin.currentTime != null ? (Number(spin.currentTime) % SPIN_MS) / SPIN_MS * 360 : 0;
+  tbObj.style.animation = 'none';
+  tbObj.style.transform = objT(-20, ang);
+
+  // 2. slow to face front, leaving the spin at the speed it had; the lid lifts and light spills
+  const target = 360 * Math.ceil((ang + 70) / 360), R = target - ang;
+  const v0 = 360 / SPIN_MS;                             // degrees per ms
+  const dur = Math.min(1150, Math.max(620, R / v0 * 1.25));
+  const x1 = 0.3, y1 = Math.min(1, v0 * dur / R * x1);
+  run(tbObj, [{ transform: objT(-20, ang) }, { transform: objT(-16, target) }], { duration: dur, easing: `cubic-bezier(${x1},${y1.toFixed(3)},.22,1)` });
+  const pop = Math.max(0, dur - 280);
+  run(tbLid, [{ transform: lidT(0, 0) }, { transform: lidT(LIFT, 14) }], { duration: 520, delay: pop, easing: 'cubic-bezier(.25,1.35,.45,1)' });
+  run($('.tb-glow'), [{ opacity: 0 }, { opacity: 1 }], { duration: 320, delay: pop + 40, easing: 'ease-out' });
+  run($('.tb-spill'), [{ opacity: 0 }, { opacity: 1 }], { duration: 380, delay: pop + 60, easing: 'ease-out' });
+  await introWait(pop + 380);
+
+  // 3. into its slot on the wall: measure the loader, lay out the page, fly between them
+  const F = tbFly.getBoundingClientRect();
+  html.classList.add('revealing');
+  html.classList.remove('intro');
+  readScroll();
+  const T = tbFly.getBoundingClientRect();
+  const from = `translate(${F.left - T.left}px, ${F.top - T.top}px) scale(${F.width / T.width})`;
+  const FLY = 1000, ease = 'cubic-bezier(.62,.02,.2,1)';
+  run(tbFly, [{ transform: from }, { transform: 'none' }], { duration: FLY, easing: ease });
+  run(tbObj, [{ transform: objT(-16, target) }, { transform: objT(0, target) }], { duration: FLY, easing: ease });
+  run(tbLid, [{ transform: lidT(LIFT, 14) }, { transform: lidT(0, 0) }], { duration: 620, delay: 180, easing: 'cubic-bezier(.55,0,.3,1)' });
+  run($('.tb-glow'), [{ opacity: 1 }, { opacity: 0 }], { duration: 520, delay: 160, easing: 'ease-in' });
+  run($('.tb-spill'), [{ opacity: 1 }, { opacity: 0 }], { duration: 600, delay: 60 });
+  run($('.tb-shadow'), [{ opacity: 1 }, { opacity: 0 }], { duration: 420, delay: FLY - 420 });
+  releaseLight(F.left + F.width / 2, F.top + F.height * 0.25);
+  await introWait(FLY + 40);
+  finishIntro();
+}
+
+// the light the box held starts drifting over the wall from where the lid opened
+function releaseLight(x, y) {
+  introDone = true;
+  S.lx = S.tx = x; S.ly = S.ty = y - S.stageTop;
+  S.k = 1; S.tk = 1; S.mode = 'idle'; S.lastInput = -1e9;
+  last = 0; invalidate();
+}
+
+function finishIntro() {
+  introAnims.splice(0).forEach(a => a.cancel());       // the CSS rest pose takes over, identical
+  tbObj.style.transform = ''; tbObj.style.animation = '';
+  html.classList.remove('intro');
+  introDone = introLanded = true;
+  // skipped: everything shows at once; played: the staggered fades finish first
+  if (introSkip) html.classList.remove('revealing');
+  else setTimeout(() => html.classList.remove('revealing'), 1600);
+  invalidate();
+}
+
 // A shared link (#pair) opens over a clean entry, so Back closes it and stays on the site.
 function openDeepLink() {
   const id = location.hash.slice(1);
@@ -840,15 +1011,16 @@ function openDeepLink() {
 
 function start() {
   applyLang();
-  if (!gl) { buildFallback(); openDeepLink(); return; }
-  try { initGL(); } catch (err) { console.warn(err); buildFallback(); openDeepLink(); return; }
+  if (!gl) { buildFallback(); openDeepLink(); playIntro(); return; }
+  try { initGL(); } catch (err) { console.warn(err); buildFallback(); openDeepLink(); playIntro(); return; }
   layout(); resize(); readScroll();
   S.lx = S.tx = L.w * 0.5; S.ly = S.ty = L.h * 0.4;
   loadTextures();
   invalidate();
   openDeepLink();
+  playIntro();
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { last = 0; invalidate(); } });
   canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); buildFallback(); });
 }
 start();
-window.__sb = { cellRect, cellAt, L, S };
+window.__sb = { cellRect, cellAt, L, S, HOLE, get cells() { return cells; }, get introDone() { return introDone; }, get introLanded() { return introLanded; } };
