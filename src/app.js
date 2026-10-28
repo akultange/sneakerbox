@@ -8,7 +8,8 @@ const catalog = JSON.parse($('#catalog').textContent);
 const photos = catalog.photos;                       // wall order = texture layer order
 const pairs = new Map(catalog.pairs.map(p => [p.id, p]));
 const brands = [...new Set(catalog.pairs.map(p => p.brand))];
-const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+// ?intro turns motion on even where the system asks for less (for demoing on such a machine)
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches && !/[?&]intro\b/.test(location.search);
 const touchFirst = matchMedia('(pointer: coarse)').matches;
 const PAGE = 'sneakerboxonlineshop';
 const MAX_CELLS = 256;

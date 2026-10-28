@@ -417,5 +417,5 @@ html.no-gl .fallback button:hover img, html.no-gl .fallback button:focus-visible
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { transition-duration: 0ms !important; animation-duration: 0ms !important; }
+  html:not(.motion) *, html:not(.motion) *::before, html:not(.motion) *::after { transition-duration: 0ms !important; animation-duration: 0ms !important; }
 }
