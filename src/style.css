@@ -78,6 +78,20 @@ a { color: inherit; }
   font: 600 13px/1 var(--sans); letter-spacing: .01em; text-decoration: none; cursor: pointer;
 }
 .top-link svg { width: 18px; height: 18px; }
+/* sound on/off: four bars, flat when it's off; on, they stand, and move for a moment with each sound */
+.snd { gap: 2px; padding: 0 14px; }
+.snd i { display: block; width: 2px; height: 13px; border-radius: 1px; background: currentColor; transform: scaleY(.24); transition: transform 240ms var(--ease-out); }
+.snd[aria-pressed='false'] { color: var(--dust); }
+.snd[aria-pressed='true'] i { transform: scaleY(.5); }
+.snd[aria-pressed='true'] i:nth-child(2) { transform: scaleY(.9); }
+.snd[aria-pressed='true'] i:nth-child(3) { transform: scaleY(.65); }
+.snd[aria-pressed='true'] i:nth-child(4) { transform: scaleY(.8); }
+.snd[aria-pressed='true'].playing i { animation: snd-eq .45s ease-in-out infinite alternate; }
+.snd[aria-pressed='true'].playing i:nth-child(2) { animation-duration: .35s; animation-delay: -.15s; }
+.snd[aria-pressed='true'].playing i:nth-child(3) { animation-duration: .55s; animation-delay: -.3s; }
+.snd[aria-pressed='true'].playing i:nth-child(4) { animation-duration: .4s; animation-delay: -.1s; }
+@keyframes snd-eq { from { transform: scaleY(.24); } to { transform: scaleY(1); } }
+@media (prefers-reduced-motion: reduce) { .snd[aria-pressed='true'].playing i { animation: none; } }
 .spec {
   font: 700 11px/1 var(--sans); letter-spacing: .08em;
   color: var(--asphalt); background: var(--cream);
@@ -124,6 +138,11 @@ html.laid .intro.gone { visibility: hidden; }          /* scrolled on: the hint 
   --lo: 3px;                                               /* lid overhang */
   --tpad: calc(var(--bh) * .17);
   --ls: .78;                                               /* loader scale */
+  --t: max(2px, calc(var(--bw) * .0072));                  /* board thickness */
+  --ti: calc(var(--bh) * .15);                             /* the red paper turned in over the rim */
+  --ty: calc(var(--bh) * .14);                             /* the tissue: how far under the rim it lies */
+  --tsl: calc(var(--bw) * .53 - var(--t));                 /* a tissue sheet: from its end wall to past the middle */
+  --tsd: calc(var(--bd) - 2 * var(--t));
   position: fixed; z-index: 70; display: none;
   left: calc(50% - var(--bw) / 2); top: calc(44% - var(--bh) / 2);
   width: var(--bw); height: var(--bh);
@@ -151,17 +170,100 @@ html.no-gl .intro-text { position: relative; left: 0; right: 0; bottom: auto; }
   background: #841919 url(assets/img/brand/paper.webp) 0 0 / calc(var(--bw) * 1.5) auto;
 }
 .tb-face::after { content: ''; position: absolute; inset: 0; z-index: 1; background: var(--shade, none); pointer-events: none; }
+
+/* outside: the lid's shadow along the top and the floor's along the bottom stay put; the turning
+   light (.tb-lt) darkens each face as it turns away from the key light, front-left */
 .tb-front, .tb-back { --fw: var(--bw); --fh: var(--bh); }
 .tb-left, .tb-right { --fw: var(--bd); --fh: var(--bh); }
-.tb-bottom, .tb-inside { --fw: var(--bw); --fh: var(--bd); }
-.tb-front { transform: translateZ(calc(var(--bd) / 2)); background-position: -30px -40px; --shade: linear-gradient(rgba(0, 0, 0, .14), rgba(0, 0, 0, 0) 42%, rgba(0, 0, 0, .22)); }
+.tb-front, .tb-back, .tb-left, .tb-right {
+  --shade: linear-gradient(rgba(0, 0, 0, .12), rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, .2));
+  box-shadow: inset 1px 0 rgba(255, 214, 196, .09), inset -1px 0 rgba(20, 0, 0, .35);   /* worn edges */
+}
+.tb-front { transform: translateZ(calc(var(--bd) / 2)); background-position: -30px -40px; }
 /* the back is printed like the front (it is what the language flip turns to face you) */
-.tb-back { transform: rotateY(180deg) translateZ(calc(var(--bd) / 2)); background-position: -30px -40px; --shade: linear-gradient(rgba(0, 0, 0, .14), rgba(0, 0, 0, 0) 42%, rgba(0, 0, 0, .22)); }
-.tb-right { transform: rotateY(90deg) translateZ(calc(var(--bw) / 2)); background-position: -260px -10px; --shade: linear-gradient(90deg, rgba(0, 0, 0, .3), rgba(0, 0, 0, .5)); }
-.tb-left { transform: rotateY(-90deg) translateZ(calc(var(--bw) / 2)); --shade: rgba(0, 0, 0, .42); }
-.tb-bottom { transform: rotateX(-90deg) translateZ(calc(var(--bh) / 2)); --shade: rgba(0, 0, 0, .62); }
-.tb-inside { transform: rotateX(90deg) translateZ(calc(var(--bh) / 2 - 2px)); background: #2a0808; }
-.tb-glow { position: absolute; inset: 0; z-index: 2; opacity: 0; background: radial-gradient(56% 62% at 50% 55%, rgba(255, 242, 204, .96), rgba(255, 210, 150, .38) 46%, rgba(42, 8, 8, 0) 76%); }
+.tb-back { transform: rotateY(180deg) translateZ(calc(var(--bd) / 2)); background-position: -30px -40px; }
+.tb-right { transform: rotateY(90deg) translateZ(calc(var(--bw) / 2)); background-position: -260px -10px; }
+.tb-left { transform: rotateY(-90deg) translateZ(calc(var(--bw) / 2)); }
+.tb-bottom { --fw: var(--bw); --fh: var(--bd); transform: rotateX(-90deg) translateZ(calc(var(--bh) / 2)); --shade: rgba(0, 0, 0, .62); }
+.tb-lt { position: absolute; inset: 0; z-index: 3; pointer-events: none; background: #1e0505; opacity: .146; }
+.tb-right > .tb-lt, .lid-right > .tb-lt, .tb-back > .tb-lt, .lid-back > .tb-lt { opacity: .55; }
+.tb-left > .tb-lt, .lid-left > .tb-lt { opacity: .257; }
+@keyframes tb-light {
+  0% { opacity: .146; } 4.167% { opacity: .266; } 8.333% { opacity: .397; } 12.5% { opacity: .514; } 16.667%, 62.5% { opacity: .55; }
+  66.667% { opacity: .508; } 70.833% { opacity: .388; } 75% { opacity: .257; } 79.167% { opacity: .139; } 83.333% { opacity: .051; }
+  87.5% { opacity: .005; } 91.667% { opacity: .007; } 95.833% { opacity: .056; } 100% { opacity: .146; }
+}
+/* light leaking out under the lid, just before it lifts */
+.tb-seam {
+  position: absolute; z-index: 4; left: 0; right: 0; top: calc(var(--lh) - var(--lo) - 1px); height: 42%;
+  opacity: 0; pointer-events: none;
+  background: linear-gradient(rgba(255, 240, 200, .95), rgba(255, 214, 150, .5) 2px, rgba(255, 196, 120, .14) 34%, rgba(255, 190, 120, 0));
+}
+
+/* inside: the raw board, the red paper turned in over the rim, shadow gathering toward the floor.
+   None of it is drawn until the box starts to open: the lid hides it, and the first frame is lighter. */
+.title-box:not(.inside) :is(.tb-in, .tb-floor, .tb-pool, .tissue, .tb-rim, .lid-under, .lid-in) { display: none; }
+/* (board colour from gradients, no picture: big hidden faces with a picture on them would count as the
+   page's largest paint when they first show, and the board is under the tissue anyway) */
+.tb-in, .tb-floor, .lid-under, .lid-in { background: radial-gradient(130% 100% at 35% 25%, #a68c69, #977c5c 55%, #876d50); }
+.tb-in { --fw: calc(var(--bw) - 2 * var(--t) + 2px); --fh: calc(var(--bh) - var(--t)); --shade: linear-gradient(rgba(10, 2, 0, .2), rgba(10, 2, 0, .06) 30%, rgba(10, 2, 0, .55)); }
+/* (there's no inside to the front wall: the box only ever opens facing you) */
+.in-back { background: linear-gradient(90deg, #8f775a, #a08665 30%, #a08665 70%, #8f775a); }
+.in-left, .in-right { --fw: calc(var(--bd) - 2 * var(--t)); }
+.tb-in::before, .lid-in::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 0; height: var(--ti);
+  background: #7d1717 url(assets/img/brand/paper.webp) -90px -130px / calc(var(--bw) * 1.5) auto;
+  box-shadow: 0 1px 1px rgba(30, 8, 0, .55), 0 3px 7px rgba(30, 8, 0, .3);
+}
+.in-back { transform: translate3d(0, calc(var(--t) / -2), calc(var(--bd) / -2 + var(--t))); }
+.in-left { transform: translate3d(calc(var(--bw) / -2 + var(--t)), calc(var(--t) / -2), 0) rotateY(90deg); }
+.in-right { transform: translate3d(calc(var(--bw) / 2 - var(--t)), calc(var(--t) / -2), 0) rotateY(-90deg); }
+.tb-floor { --fw: calc(var(--bw) - 2 * var(--t)); --fh: calc(var(--bd) - 2 * var(--t)); transform: translateY(calc(var(--bh) / 2 - var(--t))) rotateX(90deg); --shade: radial-gradient(farthest-side, rgba(10, 2, 0, .2), rgba(10, 2, 0, .6)); }
+/* the warm light from inside, on the board around it */
+.tb-warm, .tb-lamp { position: absolute; inset: 0; z-index: 2; opacity: 0; pointer-events: none; }
+.tb-warm { background: radial-gradient(140% 120% at 50% 100%, rgba(255, 216, 156, .78), rgba(255, 186, 112, .34) 50%, rgba(255, 170, 92, .1)); }
+.tb-lamp { background: radial-gradient(60% 70% at 50% 50%, rgba(255, 250, 232, 1), rgba(255, 220, 160, .85) 34%, rgba(255, 180, 100, .3) 70%, rgba(255, 170, 90, .12)); }
+.tb-pool {
+  --fw: calc(var(--bw) * .62); --fh: calc(var(--bd) - 2 * var(--t));
+  transform: translateY(calc(var(--bh) / -2 + var(--ty) + 3px)) rotateX(90deg);
+  background: radial-gradient(50% 50% at 50% 50%, rgba(255, 252, 238, 1), rgba(255, 228, 176, .9) 30%, rgba(255, 196, 120, .45) 62%, rgba(255, 180, 100, 0));
+  opacity: 0;
+}
+/* the cut edge of the board along the rim: red paper, board, red paper turned in */
+.tb-rim { --shade: linear-gradient(rgba(255, 255, 255, .12), rgba(0, 0, 0, .12)); }
+.rim-f, .rim-b { --fw: var(--bw); --fh: var(--t); background: linear-gradient(#7d1717 0 17%, #cdb38c 17% 83%, #8d1b1b 83%); }
+.rim-l, .rim-r { --fw: var(--t); --fh: calc(var(--bd) - 2 * var(--t)); background: linear-gradient(90deg, #8d1b1b 0 17%, #cdb38c 17% 83%, #7d1717 83%); }
+.rim-f { transform: translate3d(0, calc(var(--bh) / -2), calc(var(--bd) / 2 - var(--t) / 2)) rotateX(90deg); }
+.rim-b { transform: translate3d(0, calc(var(--bh) / -2), calc(var(--bd) / -2 + var(--t) / 2)) rotateX(90deg); }
+.rim-l { transform: translate3d(calc(var(--bw) / -2 + var(--t) / 2), calc(var(--bh) / -2), 0) rotateX(90deg); }
+.rim-r { transform: translate3d(calc(var(--bw) / 2 - var(--t) / 2), calc(var(--bh) / -2), 0) rotateX(90deg); }
+
+/* tissue paper: a sheet from each end wall, folded over the middle (the right one on top) and
+   sealed with a sticker. Lit from underneath (the texture is the light through the paper; the
+   humps of the pair under it are in it too); .ts-dim is the same paper with the light off. The
+   sheets stay level: a sheet at an angle would make the browser cut the front wall along it. */
+.tissue { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-style: preserve-3d; }
+.tissue-l { transform: translate3d(calc(var(--bw) / -2 + var(--t)), calc(var(--bh) / -2 + var(--ty)), 0); }
+.tissue-r { transform: translate3d(calc(var(--bw) / 2 - var(--t)), calc(var(--bh) / -2 + var(--ty) - 2px), 0) rotateY(180deg); }
+.tsh { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-style: preserve-3d; transform-origin: 0 0; }   /* at the end wall */
+.ts {
+  position: absolute; left: 0; top: calc(var(--tsd) / -2); width: var(--tsl); height: var(--tsd);
+  transform-origin: 0 50%; transform: rotateX(90deg);
+  background: url(assets/img/brand/tissue.webp) var(--tp, 0%) 0 / 200% 100% no-repeat;
+}
+.tissue-r .ts { --tp: 100%; }
+.ts-dim {
+  position: absolute; inset: 0; pointer-events: none; background: #1c0a05; opacity: .8;
+  -webkit-mask: url(assets/img/brand/tissue.webp) var(--tp, 0%) 0 / 200% 100% no-repeat;
+  mask: url(assets/img/brand/tissue.webp) var(--tp, 0%) 0 / 200% 100% no-repeat;
+}
+/* the seal: the shop's red on the edge of the top sheet */
+.ts-seal {
+  position: absolute; right: calc(var(--bw) * .015); top: 50%; width: calc(var(--bh) * .2); height: calc(var(--bh) * .2);
+  margin-top: calc(var(--bh) * -.1); border-radius: 50%;
+  background: radial-gradient(circle, #8e1c1c 52%, var(--cream) 53% 60%, #8e1c1c 61%);
+  box-shadow: 0 1px 2px rgba(60, 20, 0, .35);
+}
 
 .tb-lid {
   --lw: calc(var(--bw) + 2 * var(--lo)); --ld: calc(var(--bd) + 2 * var(--lo));
@@ -169,27 +271,40 @@ html.no-gl .intro-text { position: relative; left: 0; right: 0; bottom: auto; }
   transform-style: preserve-3d;
   transform: translateY(calc(var(--bh) / -2));
 }
-.lid-top { --fw: var(--lw); --fh: var(--ld); transform: rotateX(90deg) translateZ(var(--lo)); background-position: -120px -60px; --shade: linear-gradient(rgba(255, 255, 255, .1), rgba(255, 255, 255, .02)); }
-.lid-under { --fw: var(--lw); --fh: var(--ld); transform: rotateX(-90deg) translateZ(calc(var(--lo) * -1 + 1px)); background: #3b0d0d; --shade: linear-gradient(rgba(0, 0, 0, .35), rgba(0, 0, 0, .1)); }
-.lid-front, .lid-back { --fw: var(--lw); --fh: var(--lh); }
-.lid-left, .lid-right { --fw: var(--ld); --fh: var(--lh); }
+/* the logo printed big on the lid */
+.lid-top {
+  --fw: var(--lw); --fh: var(--ld); transform: rotateX(90deg) translateZ(var(--lo));
+  display: grid; place-items: center; background-position: -120px -60px;
+  --shade: linear-gradient(rgba(255, 255, 255, .1), rgba(255, 255, 255, .02));
+  box-shadow: inset 0 0 0 1px rgba(255, 220, 200, .08);
+}
+.lid-top img { position: relative; z-index: 2; width: 44%; height: auto; opacity: .95; filter: drop-shadow(0 1px 0 rgba(60, 0, 0, .35)); }
+.lid-under { --fw: var(--lw); --fh: var(--ld); transform: rotateX(-90deg) translateZ(calc(var(--lo) * -1 + 1px)); --shade: radial-gradient(farthest-side, rgba(10, 2, 0, .15), rgba(10, 2, 0, .5)); }
+.lid-under > .tb-warm { background: radial-gradient(70% 80% at 50% 50%, rgba(255, 222, 166, .8), rgba(255, 190, 116, .35) 60%, rgba(255, 170, 92, .12)); }
+.lid-front, .lid-back, .lid-in-f, .lid-in-b { --fw: var(--lw); --fh: var(--lh); }
+.lid-left, .lid-right, .lid-in-l, .lid-in-r { --fw: var(--ld); --fh: var(--lh); }
+.lid-front, .lid-back, .lid-left, .lid-right { --shade: linear-gradient(rgba(255, 255, 255, .07), rgba(0, 0, 0, .12)); box-shadow: 0 2px 3px rgba(40, 0, 0, .45), inset 0 1px rgba(255, 220, 200, .1); }
 .lid-front {
   transform: translateY(calc(var(--lh) / 2 - var(--lo))) translateZ(calc(var(--ld) / 2));
   display: flex; align-items: center; padding-left: calc(var(--tpad) + var(--lo));
   background-position: -30px -12px;
-  --shade: linear-gradient(rgba(255, 255, 255, .07), rgba(0, 0, 0, .12));
-  box-shadow: 0 2px 3px rgba(40, 0, 0, .45);
 }
 .lid-front img, .lid-back img { position: relative; z-index: 2; width: auto; height: calc(var(--lh) * .34); }
 .lid-back {
   transform: translateY(calc(var(--lh) / 2 - var(--lo))) rotateY(180deg) translateZ(calc(var(--ld) / 2));
   display: flex; align-items: center; padding-left: calc(var(--tpad) + var(--lo));
   background-position: -30px -12px;
-  --shade: linear-gradient(rgba(255, 255, 255, .07), rgba(0, 0, 0, .12));
-  box-shadow: 0 2px 3px rgba(40, 0, 0, .45);
 }
-.lid-right { transform: translateY(calc(var(--lh) / 2 - var(--lo))) rotateY(90deg) translateZ(calc(var(--lw) / 2)); background-position: -200px -30px; --shade: rgba(0, 0, 0, .4); }
-.lid-left { transform: translateY(calc(var(--lh) / 2 - var(--lo))) rotateY(-90deg) translateZ(calc(var(--lw) / 2)); --shade: rgba(0, 0, 0, .4); }
+.lid-right { transform: translateY(calc(var(--lh) / 2 - var(--lo))) rotateY(90deg) translateZ(calc(var(--lw) / 2)); background-position: -200px -30px; }
+.lid-left { transform: translateY(calc(var(--lh) / 2 - var(--lo))) rotateY(-90deg) translateZ(calc(var(--lw) / 2)); }
+/* inside the lid's rim: board, with the red paper turned up over its edge */
+.lid-in { --shade: linear-gradient(rgba(10, 2, 0, .5), rgba(10, 2, 0, .15)); }
+.lid-in::before { top: auto; bottom: 0; height: 34%; box-shadow: 0 -1px 1px rgba(30, 8, 0, .5); }
+.lid-in > .tb-warm { background: linear-gradient(to top, rgba(255, 216, 156, .7), rgba(255, 190, 116, .15)); }
+.lid-in-f { transform: translateY(calc(var(--lh) / 2 - var(--lo))) translateZ(calc(var(--ld) / 2 - 1px)) rotateY(180deg); }
+.lid-in-b { transform: translateY(calc(var(--lh) / 2 - var(--lo))) translateZ(calc(var(--ld) / -2 + 1px)); }
+.lid-in-l { transform: translateY(calc(var(--lh) / 2 - var(--lo))) translateX(calc(var(--lw) / -2 + 1px)) rotateY(90deg); }
+.lid-in-r { transform: translateY(calc(var(--lh) / 2 - var(--lo))) translateX(calc(var(--lw) / 2 - 1px)) rotateY(-90deg); }
 
 /* the headline, printed on the box in the logo's cream (the other language on the back) */
 .tb-headline, .tb-alt {
@@ -205,8 +320,16 @@ html.no-gl .intro-text { position: relative; left: 0; right: 0; bottom: auto; }
   font-family: var(--sans); font-weight: 800; letter-spacing: -.03em;
   font-size: min(calc((var(--bw) - 2 * var(--tpad)) * .17), calc((var(--bh) - var(--lh)) * .4));
 }
-.tb-shadow { position: absolute; left: 4%; right: 4%; top: 78%; height: 50%; pointer-events: none; opacity: 0; background: radial-gradient(closest-side, rgba(0, 0, 0, .66), rgba(0, 0, 0, 0)); }
-html.intro .tb-shadow { opacity: 1; animation: tb-shadow-in .9s both, tb-shadow-spin 2.8s linear infinite; }
+.tb-shadow { position: absolute; left: 4%; right: 4%; top: 78%; height: 50%; pointer-events: none; opacity: 0; }
+/* one animation per element, so each runs off the main thread: it comes in, its footprint turns
+   with the box, and it fades a little as the box floats up */
+.tb-shadow i { position: absolute; inset: 0; }
+.tb-shadow > i > i { background: radial-gradient(closest-side, rgba(0, 0, 0, .66), rgba(0, 0, 0, 0)); }
+html.intro .tb-shadow { opacity: 1; animation: tb-shadow-in .9s both; }
+html.intro .tb-shadow > i { animation: tb-shadow-spin 2.8s linear infinite; }
+html.intro .tb-shadow > i > i { animation: tb-shadow-bob 3.4s ease-in-out .9s infinite; }
+/* once it's down: the dark line where the box meets the floor */
+.tb-contact { position: absolute; left: 1%; right: 1%; top: 88%; height: 22%; pointer-events: none; opacity: 0; background: radial-gradient(closest-side, rgba(0, 0, 0, .8), rgba(0, 0, 0, .45) 55%, rgba(0, 0, 0, 0)); }
 
 /* the end label: printed on cream stock, under the same light as the face it sits on */
 .tb-tag {
@@ -224,7 +347,28 @@ html.intro .tb-shadow { opacity: 1; animation: tb-shadow-in .9s both, tb-shadow-
   flex: 1; min-height: 0; margin-top: 2%;
   background: repeating-linear-gradient(90deg, #2b1411 0 1px, transparent 1px 3px, #2b1411 3px 5px, transparent 5px 6px, #2b1411 6px 7px, transparent 7px 10px, #2b1411 10px 12px, transparent 12px 13px);
 }
-.tb-spill { position: absolute; left: -10%; right: -10%; top: -95%; height: 150%; pointer-events: none; opacity: 0; mix-blend-mode: screen; background: radial-gradient(46% 52% at 50% 74%, rgba(255, 238, 200, .5), rgba(255, 238, 200, 0)); }
+/* the light between the lifted lid and the box: a warm band, brightest at the gap */
+.tb-spill {
+  position: absolute; left: -16%; right: -16%; top: -88%; height: 150%; pointer-events: none; opacity: 0; mix-blend-mode: screen;
+  background:
+    radial-gradient(42% 9% at 50% 61%, rgba(255, 244, 214, .7), rgba(255, 226, 170, 0)),
+    radial-gradient(52% 34% at 50% 63%, rgba(255, 226, 172, .42), rgba(255, 214, 150, .1) 60%, rgba(255, 210, 150, 0));
+}
+/* the open box: a column of light standing out of it, with dust turning in it */
+.tb-beam {
+  position: absolute; left: 4%; right: 4%; bottom: 82%; height: 300%; pointer-events: none; opacity: 0; mix-blend-mode: screen;
+  transform-origin: 50% 100%;
+  background:
+    linear-gradient(to top, rgba(255, 232, 186, .55), rgba(255, 222, 168, .2) 30%, rgba(255, 220, 160, .05) 62%, rgba(255, 220, 160, 0) 88%),
+    repeating-linear-gradient(97deg, rgba(255, 236, 200, 0) 0 7%, rgba(255, 236, 200, .07) 9% 11%, rgba(255, 236, 200, 0) 14% 21%);
+  -webkit-mask: linear-gradient(90deg, transparent, #000 22%, #000 78%, transparent);
+  mask: linear-gradient(90deg, transparent, #000 22%, #000 78%, transparent);
+  clip-path: polygon(10% 100%, 90% 100%, 104% 0, -4% 0);
+}
+.tb-beam i { position: absolute; left: 0; bottom: 0; width: 5px; height: 5px; border-radius: 50%; background: radial-gradient(closest-side, rgba(255, 246, 220, .95), rgba(255, 230, 180, 0)); }
+/* dust off the floor where it lands (screen space, in front of the box) */
+.tb-dust { position: absolute; inset: 0; z-index: 71; pointer-events: none; }
+.tb-dust i { position: absolute; left: 0; top: 0; width: 44px; height: 24px; margin: -12px 0 0 -22px; border-radius: 50%; opacity: 0; background: radial-gradient(closest-side, rgba(190, 176, 154, .34), rgba(190, 176, 154, 0)); }
 
 /* the loader: a barcode under the spinning box prints one bar per photo, with a rolling count */
 .tb-load {
@@ -246,11 +390,34 @@ html.intro .tb-shadow { opacity: 1; animation: tb-shadow-in .9s both, tb-shadow-
 .tb-roll b { display: block; font-weight: inherit; transition: transform 420ms cubic-bezier(.2, .8, .2, 1); }
 .tb-roll b span { display: block; height: 1em; }
 #tb-of { white-space: pre; }
+.tb-count { transition: opacity 260ms linear; }
+/* complete: the count gives way to the invitation to open the box (with its sound) */
+.tb-tap {
+  position: absolute; left: 50%; bottom: -5px; transform: translateX(-50%);
+  white-space: nowrap;
+  font: 600 13px/1 var(--sans); letter-spacing: .02em; color: var(--cream);
+  opacity: 0; transition: opacity 320ms linear;
+}
+html:not([lang='en']) .tb-tap { font-family: var(--ka); }
+.tb-tap-in { display: inline-flex; align-items: center; gap: 7px; }
+.tb-tap svg { width: 17px; height: 17px; flex: none; }
+.tb-load.ready .tb-count { opacity: 0; }
+.tb-load.ready .tb-tap { opacity: 1; }
+.tb-load.ready .tb-tap-in { animation: tb-tap 1.6s ease-in-out .35s infinite; }
+@keyframes tb-tap { 50% { opacity: .5; } }
 
 /* intro: the box spins in the middle while the photos arrive; everything else waits */
 html.intro, html.intro body, html.unboxing, html.unboxing body { overflow: hidden; }
 html.intro .tb-obj { animation: tb-spin 2.8s linear infinite; }
-html.intro .tb-persp { animation: tb-drop .9s both; }
+html.intro .tb-persp { animation: tb-drop .9s both, tb-bob 3.4s ease-in-out .9s infinite; }
+/* the light on each face turns with the box (the same turn, a quarter apart) */
+html.intro .tb-lt { animation: tb-light 2.8s linear infinite; }
+html.intro .tb-right > .tb-lt, html.intro .lid-right > .tb-lt { animation-delay: -.7s; }
+html.intro .tb-back > .tb-lt, html.intro .lid-back > .tb-lt { animation-delay: -1.4s; }
+html.intro .tb-left > .tb-lt, html.intro .lid-left > .tb-lt { animation-delay: -2.1s; }
+/* and it floats while it turns */
+@keyframes tb-bob { 50% { translate: 0 -7px; } }
+@keyframes tb-shadow-bob { 0%, 100% { opacity: 1; } 50% { opacity: .7; } }
 /* the box drops onto a lit stage, spinning, with one small bounce */
 /* (visible from the first frame: it is the page's largest paint, so it never starts hidden) */
 @keyframes tb-drop {

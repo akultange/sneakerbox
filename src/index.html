@@ -37,6 +37,7 @@
 <header class="top">
   <a class="brand" href="#top" aria-label="Sneakerbox"><img src="assets/img/brand/wordmark.webp" width="757" height="106" alt="Sneakerbox"></a>
   <span class="spec" title="Concept by Luka Skhiladze">SPEC</span>
+  <button class="top-link snd" id="snd" type="button" aria-pressed="false" aria-label="ხმა" data-i18n-label="sound"><i></i><i></i><i></i><i></i></button>
   <button class="top-link" id="lang" type="button">ENG</button>
   <a class="top-link" id="msg-top" href="https://m.me/sneakerboxonlineshop" target="_blank" rel="noopener" aria-label="Messenger">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2C6.36 2 2 6.13 2 11.7c0 2.91 1.19 5.44 3.14 7.17.16.15.26.35.27.57l.05 1.78a.8.8 0 0 0 1.12.71l1.98-.88a.8.8 0 0 1 .53-.04c.91.25 1.87.38 2.91.38 5.64 0 10-4.13 10-9.7S17.64 2 12 2Zm6 7.46-2.94 4.66a1.5 1.5 0 0 1-2.17.4l-2.34-1.75a.6.6 0 0 0-.72 0l-3.16 2.4c-.42.32-.97-.18-.69-.63l2.94-4.66a1.5 1.5 0 0 1 2.17-.4l2.34 1.75a.6.6 0 0 0 .72 0l3.16-2.4c.42-.32.97.18.69.63Z"/></svg>
@@ -56,15 +57,31 @@
            side. It is the loader, then it drops, opens, and the pairs come out of it onto the wall. -->
       <div class="title-box" id="title-box">
         <div class="tb-fly" id="tb-fly">
-          <div class="tb-shadow" aria-hidden="true"></div>
+          <div class="tb-shadow" aria-hidden="true"><i><i></i></i></div>
+          <div class="tb-contact" aria-hidden="true"></div>
           <div class="tb-persp">
-            <div class="tb-obj" id="tb-obj">
-              <div class="tb-face tb-bottom" aria-hidden="true"></div>
+            <div class="tb-obj" id="tb-obj" aria-hidden="true">
+              <div class="tb-face tb-bottom"></div>
+              <!-- inside: raw board, with the red paper turned in over the rim; a lamp on the floor -->
+              <div class="tb-face tb-floor"><i class="tb-lamp"></i></div>
+              <div class="tb-face tb-in in-back"><i class="tb-warm"></i></div>
+              <div class="tb-face tb-in in-left"><i class="tb-warm"></i></div>
+              <div class="tb-face tb-in in-right"><i class="tb-warm"></i></div>
+              <!-- the light itself, under the tissue: it shows when the tissue parts -->
+              <div class="tb-face tb-pool"></div>
+              <!-- two sheets of tissue paper, folded in from the ends and sealed, the light coming through them -->
+              <div class="tissue tissue-l"><div class="tsh"><div class="ts"><i class="ts-dim"></i></div></div></div>
+              <div class="tissue tissue-r"><div class="tsh"><div class="ts"><i class="ts-dim"></i><i class="ts-seal"></i></div></div></div>
+              <!-- the cut edges of the board along the rim -->
+              <div class="tb-face tb-rim rim-f"></div>
+              <div class="tb-face tb-rim rim-b"></div>
+              <div class="tb-face tb-rim rim-l"></div>
+              <div class="tb-face tb-rim rim-r"></div>
+              <!-- outside; each face darkens as it turns away from the light -->
               <!-- the back carries the other language: ENG / ქარ turns the box over -->
-              <div class="tb-face tb-back" aria-hidden="true"><div class="tb-alt" id="tb-alt"><span></span> <span></span></div></div>
-              <div class="tb-face tb-left" aria-hidden="true"></div>
-              <div class="tb-face tb-inside" aria-hidden="true"><i class="tb-glow"></i></div>
-              <div class="tb-face tb-right" aria-hidden="true">
+              <div class="tb-face tb-back"><div class="tb-alt" id="tb-alt"><span></span> <span></span></div><i class="tb-lt"></i></div>
+              <div class="tb-face tb-left"><i class="tb-lt"></i></div>
+              <div class="tb-face tb-right">
                 <!-- the end label every shoebox has, caught as the box turns -->
                 <div class="tb-tag">
                   <b>SNEAKERBOX</b>
@@ -73,28 +90,38 @@
                   <span class="tag-row"><em>PAIRS</em><strong id="tag-pairs"></strong></span>
                   <i class="tag-code"></i>
                 </div>
+                <i class="tb-lt"></i>
               </div>
               <div class="tb-face tb-front">
-                <div class="tb-headline" id="tb-headline" aria-hidden="true"><span>რეალური წყვილები.</span> <span>რეალური ფოტოები.</span></div>
+                <div class="tb-headline" id="tb-headline"><span>რეალური წყვილები.</span> <span>რეალური ფოტოები.</span></div>
+                <i class="tb-lt"></i><i class="tb-seam"></i>
               </div>
-              <div class="tb-lid" id="tb-lid" aria-hidden="true">
-                <div class="tb-face lid-under"></div>
-                <div class="tb-face lid-top"></div>
-                <div class="tb-face lid-back"><img src="assets/img/brand/wordmark.webp" width="757" height="106" alt=""></div>
-                <div class="tb-face lid-left"></div>
-                <div class="tb-face lid-right"></div>
-                <div class="tb-face lid-front"><img src="assets/img/brand/wordmark.webp" width="757" height="106" alt=""></div>
+              <div class="tb-lid" id="tb-lid">
+                <div class="tb-face lid-under"><i class="tb-warm"></i></div>
+                <div class="tb-face lid-in lid-in-f"><i class="tb-warm"></i></div>
+                <div class="tb-face lid-in lid-in-b"><i class="tb-warm"></i></div>
+                <div class="tb-face lid-in lid-in-l"><i class="tb-warm"></i></div>
+                <div class="tb-face lid-in lid-in-r"><i class="tb-warm"></i></div>
+                <div class="tb-face lid-top"><img src="assets/img/brand/wordmark.webp" width="757" height="106" alt=""></div>
+                <div class="tb-face lid-back"><img src="assets/img/brand/wordmark.webp" width="757" height="106" alt=""><i class="tb-lt"></i></div>
+                <div class="tb-face lid-left"><i class="tb-lt"></i></div>
+                <div class="tb-face lid-right"><i class="tb-lt"></i></div>
+                <div class="tb-face lid-front"><img src="assets/img/brand/wordmark.webp" width="757" height="106" alt=""><i class="tb-lt"></i></div>
               </div>
             </div>
           </div>
+          <!-- the light out of the box: the glow between box and lid, then a column of it, with dust in it -->
           <i class="tb-spill" aria-hidden="true"></i>
+          <div class="tb-beam" id="tb-beam" aria-hidden="true"></div>
         </div>
-        <!-- the loader: a barcode that prints one bar per photo, then gets scanned -->
+        <!-- the loader: a barcode that prints one bar per photo; once it's complete, the box waits a moment to be opened -->
         <div class="tb-load" id="tb-load" aria-hidden="true">
           <div class="tb-code" id="tb-code"><i class="tb-scan" id="tb-scan"></i></div>
           <span class="tb-count" id="tb-count"><span class="tb-roll" id="tb-roll"></span><span id="tb-of"></span></span>
+          <span class="tb-tap" id="tb-tap"><span class="tb-tap-in"><svg viewBox="0 0 24 24"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5Z" fill="currentColor"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span id="tb-tap-text"></span></span></span>
         </div>
       </div>
+      <div class="tb-dust" id="tb-dust" aria-hidden="true"></div>
       <div class="intro-text" id="intro-text">
         <p id="hint" data-i18n="hint">თითი გადაატარე კედელს და სინათლე ფერს გაჩვენებს. შეეხე წყვილს, რომ ნახო ზომები და ფასი.</p>
         <span class="count" id="count"></span>

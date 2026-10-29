@@ -3,6 +3,14 @@ const puppeteer = require('puppeteer-core');
 const m = require('@sparticuz/chromium'); const chromium = m.default || m;
 const [url = 'http://127.0.0.1:8765/', out = 'qa'] = process.argv.slice(2);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+// a tap with its own timestamps (80 ms apart): this software renderer can take most of a
+// second per frame, which would otherwise make a tap look like a long press
+const tapAt = async (p, x, y) => {
+  const c = await p.target().createCDPSession(), t = Date.now() / 1000;
+  await c.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }], timestamp: t });
+  await c.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [], timestamp: t + 0.08 });
+  await c.detach();
+};
 const res = []; const ok = (n, p, i = '') => res.push(`${p ? 'PASS' : 'FAIL'}  ${n}${i ? '  ' + i : ''}`);
 const PHONE = { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
 const DESK = { width: 1916, height: 875, deviceScaleFactor: 1 };
@@ -49,17 +57,19 @@ const DESK = { width: 1916, height: 875, deviceScaleFactor: 1 };
     await p.screenshot({ path: `${out}/intro-end-${name}.png`, captureBeyondViewport: false });
 
     // scrolling: the hint rides with the wall and fades; back at the top it is there again
-    const settled = () => p.waitForFunction(() => window.__sb.F.p === window.__sb.F.tp, { timeout: 10000 }).then(() => sleep(250), () => {});
-    await p.evaluate(() => scrollTo(0, window.__sb.L.h * 0.45)); await sleep(300); await settled();
+    // settled = the page has arrived where it was sent and the hint has caught up with it
+    const settled = y => p.waitForFunction(y => Math.abs(scrollY - y) < 2 && window.__sb.F.p === window.__sb.F.tp, { timeout: 10000 }, y).then(() => sleep(250), () => {});
+    const down = await p.evaluate(() => Math.round(window.__sb.L.h * 0.45));
+    await p.evaluate(y => scrollTo(0, y), down); await sleep(300); await settled(down);
     const gone = await p.evaluate(() => ({ p: window.__sb.F.p, intro: document.querySelector('#intro').className }));
     ok(`${name}: scrolled on, the hint has gone`, gone.p === 1 && /gone/.test(gone.intro), JSON.stringify(gone));
-    await p.evaluate(() => scrollTo(0, 0)); await sleep(300); await settled();
+    await p.evaluate(() => scrollTo(0, 0)); await sleep(300); await settled(0);
     const back = await p.evaluate(() => ({ p: window.__sb.F.p, op: getComputedStyle(document.querySelector('#intro-text')).opacity }));
     ok(`${name}: back at the top, the hint is back`, back.p === 0 && back.op === '1', JSON.stringify(back));
 
     // a tile opens its pair once the wall is complete
     const c = await p.evaluate(() => { const r = window.__sb.cellRect(window.__sb.L.cols + 1); return { x: r.x + r.w / 2, y: r.y + r.h / 2 }; });
-    if (name === 'phone') await p.touchscreen.tap(c.x, c.y); else await p.mouse.click(c.x, c.y);
+    if (name === 'phone') await tapAt(p, c.x, c.y); else await p.mouse.click(c.x, c.y);
     await p.waitForFunction(() => document.querySelector('#sheet').classList.contains('open'), { timeout: 8000 }).catch(() => {});
     ok(`${name}: a tile opens its pair`, await p.evaluate(() => document.querySelector('#sheet').classList.contains('open')));
     await p.close();
@@ -71,6 +81,56 @@ const DESK = { width: 1916, height: 875, deviceScaleFactor: 1 };
     await p.keyboard.press('Shift');
     await done(p);
     ok(`${name}: a key skips the intro`, Date.now() - ts < 2500, `${Date.now() - ts} ms`);
+    await p.close();
+  }
+
+  // the box waits to be opened: a prompt, then it opens by itself; a tap opens it at once
+  const phaseAt = (p, ph) => p.waitForFunction(ph => document.querySelector('#title-box').dataset.phase === ph, { timeout: 20000, polling: 20 }, ph);
+  for (const [name, vp] of [['phone', PHONE], ['desktop', DESK]]) {
+    let p = await open(vp);
+    await phaseAt(p, 'ready'); await sleep(450);
+    const prompt = await p.evaluate(() => ({ ready: document.querySelector('#tb-load').classList.contains('ready'), op: +getComputedStyle(document.querySelector('#tb-tap')).opacity, text: document.querySelector('#tb-tap-text').textContent }));
+    ok(`${name}: when it's loaded the box asks to be opened`, prompt.ready && prompt.op > 0.4 && prompt.text === (name === 'phone' ? 'გასახსნელად შეეხე' : 'გასახსნელად დააჭირე'), JSON.stringify(prompt));
+    const t1 = Date.now();
+    await phaseAt(p, 'scan');
+    const waited = Date.now() - t1 + 450;
+    ok(`${name}: untouched, it opens by itself after a moment`, waited > 1200 && waited < 4500, `${waited} ms`);
+    // the light comes on in it as the lid lifts: the tissue glows, the board and the lid's underside are lit
+    await phaseAt(p, 'drop');
+    const lit = await p.evaluate(() => ({ dim: +getComputedStyle(document.querySelector('.ts-dim')).opacity, warm: +getComputedStyle(document.querySelector('.tb-warm')).opacity,
+      tissue: getComputedStyle(document.querySelector('.ts')).backgroundImage.includes('tissue.webp') && performance.getEntriesByType('resource').some(e => /tissue\.webp/.test(e.name) && e.responseEnd > 0) }));
+    ok(`${name}: the light comes on inside as the lid lifts`, lit.dim < 0.25 && lit.warm > 0.75 && lit.tissue, JSON.stringify(lit));
+    await p.close();
+
+    p = await open(vp);
+    await phaseAt(p, 'ready'); await sleep(200);
+    const ts = Date.now();
+    if (name === 'phone') await tapAt(p, vp.width / 2, vp.height * 0.44); else await p.mouse.click(vp.width / 2, vp.height * 0.44);
+    await phaseAt(p, 'scan');
+    ok(`${name}: a tap opens it at once`, Date.now() - ts < 900, `${Date.now() - ts} ms`);
+    await done(p);
+    ok(`${name}: and it plays through to the wall`, await p.evaluate(() => window.__sb.introLanded && getComputedStyle(document.querySelector('#title-box')).display === 'none'));
+    await p.close();
+  }
+
+  // the sound switch: on by default, off is remembered, and with it off the box doesn't wait
+  {
+    let p = await open(DESK);
+    await p.keyboard.press('Shift'); await done(p); await sleep(1600);
+    const on = await p.evaluate(() => document.querySelector('#snd').getAttribute('aria-pressed'));
+    await p.click('#snd'); await sleep(200);
+    const off = await p.evaluate(() => ({ pressed: document.querySelector('#snd').getAttribute('aria-pressed'), saved: localStorage.getItem('sb-sound'), label: document.querySelector('#snd').getAttribute('aria-label') }));
+    ok('sound: on by default, the switch turns it off and says so', on === 'true' && off.pressed === 'false' && off.saved === 'off' && off.label === 'ხმა', JSON.stringify({ on, ...off }));
+    await p.goto(url, { waitUntil: 'domcontentloaded' });
+    const seen = await p.evaluate(() => new Promise(res => {
+      const phases = new Set(), tb = document.querySelector('#title-box');
+      const tick = () => { if (tb.dataset.phase) phases.add(tb.dataset.phase); if (tb.dataset.phase === 'scan' || window.__sb?.introLanded) return res([...phases]); requestAnimationFrame(tick); };
+      tick();
+    }));
+    ok('sound: off is remembered, and the box opens without waiting', !seen.includes('ready') && await p.evaluate(() => document.querySelector('#snd').getAttribute('aria-pressed') === 'false'), JSON.stringify(seen));
+    await done(p); await sleep(1600);
+    await p.click('#snd'); await sleep(200);
+    ok('sound: and back on', await p.evaluate(() => document.querySelector('#snd').getAttribute('aria-pressed') === 'true' && localStorage.getItem('sb-sound') === 'on'));
     await p.close();
   }
 

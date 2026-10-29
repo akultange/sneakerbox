@@ -53,6 +53,8 @@ const T = {
     close: 'დახურვა',
     langBtn: 'ENG',
     langLabel: 'Switch to English',
+    tapOpen: touchFirst ? 'გასახსნელად შეეხე' : 'გასახსნელად დააჭირე',
+    sound: 'ხმა',
     photo: (i, n) => `${i} / ${n}`,
     orderMsg: (p, s) => `გამარჯობა! მინდა შევუკვეთო: ${name(p)} (${p.color.ka}), ზომა ${s}.`,
   },
@@ -95,6 +97,8 @@ const T = {
     close: 'Close',
     langBtn: 'ქარ',
     langLabel: 'ქართულად',
+    tapOpen: touchFirst ? 'Tap to open' : 'Click to open',
+    sound: 'Sound',
     photo: (i, n) => `${i} / ${n}`,
     orderMsg: (p, s) => `Hi! I would like to order: ${name(p)} (${p.color.en}), size ${s}.`,
   },
@@ -104,6 +108,239 @@ try { if (localStorage.getItem('sb-lang') === 'en') lang = 'en'; } catch {}
 const t = (k, ...a) => { const v = T[lang][k]; return typeof v === 'function' ? v(...a) : v; };
 const name = p => p.model ? `${p.brand} ${p.model}` : p.brand;
 const price = p => `${p.price} ₾`;
+
+// ---------------------------------------------------------------- sound
+// Every sound is made here, in the page; there are no sound files. Paper, board and air for
+// the box, soft wooden notes for the wall, a small bell when an order is ready, and a quiet
+// room under it all. Browsers allow no sound before the page is first touched or clicked,
+// so it starts then. The switch in the header turns it off, and that is remembered.
+const snd = (() => {
+  let ctx = null, bus = null, wet = null, noise = null, crinkle = null, amb = null;
+  let want = true, armedAt = 0;
+  try { want = localStorage.getItem('sb-sound') !== 'off'; } catch {}
+  // running, or just asked to start by a tap (what's played in that moment plays as it starts)
+  const live = () => !!(want && ctx && (ctx.state === 'running' || (ctx.state === 'suspended' && performance.now() - armedAt < 1200)));
+
+  function buffer(sec, chans, fill) {
+    const n = Math.floor(ctx.sampleRate * sec), b = ctx.createBuffer(chans, n, ctx.sampleRate);
+    for (let c = 0; c < chans; c++) fill(b.getChannelData(c), c);
+    return b;
+  }
+  function init() {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return false;
+    try { ctx = new AC({ latencyHint: 'interactive' }); } catch { return false; }
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -18; comp.knee.value = 10; comp.ratio.value = 3; comp.attack.value = 0.003; comp.release.value = 0.22;
+    const master = ctx.createGain(); master.gain.value = 0.85;
+    bus = ctx.createGain(); bus.connect(comp); comp.connect(master); master.connect(ctx.destination);
+    // a small, soft room for the bells and the light to ring in
+    const verb = ctx.createConvolver();
+    verb.buffer = buffer(1.8, 2, d => {
+      let lp = 0;
+      for (let i = 0; i < d.length; i++) {
+        const x = i / d.length;
+        lp += (Math.random() * 2 - 1 - lp) * (0.6 - 0.45 * x);              // darker as it dies away
+        d[i] = lp * Math.pow(1 - x, 3) * Math.min(1, i / 90);
+      }
+    });
+    wet = ctx.createGain(); wet.gain.value = 0.3; wet.connect(verb); verb.connect(comp);
+    noise = buffer(2, 1, d => { for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; });
+    // tissue paper: crackles in bursts, over a little hiss
+    crinkle = buffer(1.6, 1, d => {
+      const sr = ctx.sampleRate;
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * 0.025;
+      let i = 0;
+      while (i < d.length) {
+        const dense = 0.5 + 0.5 * Math.sin(i / sr * 23 + Math.sin(i / sr * 7) * 2);
+        i += 1 + Math.floor(-Math.log(Math.random() + 1e-9) * sr / (250 + 1500 * dense));
+        const a = Math.pow(Math.random(), 2.4) * (Math.random() < 0.07 ? 1 : 0.45), len = 6 + Math.floor(Math.random() * 46);
+        for (let k = 0; k < len && i + k < d.length; k++) d[i + k] += a * (Math.random() * 2 - 1) * Math.exp(-k / (len * 0.28));
+      }
+    });
+    ctx.onstatechange = () => { if (ctx.state === 'running' && introLanded) ambient(true); };
+    return true;
+  }
+
+  // one voice: something through a filter and an envelope, panned, a little of it into the room
+  function out(node, pan, send) {
+    let n = node;
+    if (pan) { const p = ctx.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, pan)); n.connect(p); n = p; }
+    n.connect(bus);
+    if (send) { const s = ctx.createGain(); s.gain.value = send; n.connect(s); s.connect(wet); }
+  }
+  function shape(g, t, attack, peak, dur) {
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(peak, t + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(dur, attack + 0.01));
+  }
+  function hiss({ at = 0, dur, type = 'bandpass', f0, f1 = f0, q = 1, gain, attack = 0.003, pan = 0, send = 0, buf = noise }) {
+    const t = ctx.currentTime + at;
+    const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+    const f = ctx.createBiquadFilter(); f.type = type; f.Q.value = q;
+    f.frequency.setValueAtTime(f0, t);
+    if (f1 !== f0) f.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    const g = ctx.createGain(); shape(g, t, attack, gain, dur);
+    src.connect(f); f.connect(g); out(g, pan, send);
+    src.start(t, Math.random() * (buf.duration - 0.1)); src.stop(t + dur + 0.05);
+  }
+  function tone({ at = 0, f0, f1 = f0, glide, dur, type = 'sine', gain, attack = 0.003, pan = 0, send = 0 }) {
+    const t = ctx.currentTime + at;
+    const o = ctx.createOscillator(); o.type = type;
+    o.frequency.setValueAtTime(f0, t);
+    if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t + (glide || dur));
+    const g = ctx.createGain(); shape(g, t, attack, gain, dur);
+    o.connect(g); out(g, pan, send);
+    o.start(t); o.stop(t + dur + 0.05);
+  }
+  // the switch's bars move for a moment whenever something plays
+  let playingTimer = 0;
+  const playing = () => {
+    const b = btn(); if (!b) return;
+    b.classList.add('playing'); clearTimeout(playingTimer);
+    playingTimer = setTimeout(() => b.classList.remove('playing'), 900);
+  };
+  const play = fn => (...a) => { if (live()) { fn(...a); playing(); } };
+  const rnd = (a, b) => a + Math.random() * (b - a);
+
+  // the room: air through a soft band, a low hum under it; moving the light opens the air a little
+  function ambient(on) {
+    if (on && !amb && live()) {
+      const g = ctx.createGain(); g.gain.value = 0.0001; g.connect(bus);
+      const src = ctx.createBufferSource(); src.buffer = noise; src.loop = true;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 480; lp.Q.value = 0.5;
+      const lp2 = ctx.createBiquadFilter(); lp2.type = 'lowpass'; lp2.frequency.value = 900; lp2.Q.value = 0.3;
+      const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 100;
+      const air = ctx.createGain(); air.gain.value = 0.42;
+      src.connect(lp); lp.connect(lp2); lp2.connect(hp); hp.connect(air); air.connect(g);
+      const oscs = [55, 82.5, 110.2].map((f, i) => {
+        const o = ctx.createOscillator(); o.frequency.value = f;
+        const og = ctx.createGain(); og.gain.value = [0.2, 0.11, 0.06][i];
+        o.connect(og); og.connect(g); o.start(); return o;
+      });
+      const lfo = ctx.createOscillator(); lfo.frequency.value = 0.06;
+      const depth = ctx.createGain(); depth.gain.value = 120; lfo.connect(depth); depth.connect(lp.frequency); lfo.start();
+      src.start();
+      g.gain.setTargetAtTime(0.024, ctx.currentTime, 2.2);
+      amb = { g, src, oscs, lfo, lp, air };
+    } else if (!on && amb) {
+      const a = amb; amb = null;
+      a.g.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.25);
+      setTimeout(() => { try { a.src.stop(); a.lfo.stop(); a.oscs.forEach(o => o.stop()); } catch {} a.g.disconnect(); }, 1500);
+    }
+  }
+  let airAt = 0, plinkAt = 0;
+  function motion(speed) {                       // px per ms of the light, from the frame loop
+    if (!amb || !live()) return;
+    const n = performance.now(); if (n - airAt < 90) return; airAt = n;
+    const s = Math.min(1, speed / 1.6), t = ctx.currentTime;
+    amb.lp.frequency.setTargetAtTime(480 + 900 * s, t, 0.3);
+    amb.air.gain.setTargetAtTime(0.42 + 0.5 * s, t, 0.3);
+  }
+
+  function unlock() {
+    if (!want) return;
+    if (navigator.userActivation && !navigator.userActivation.isActive && !ctx) return;   // not a gesture yet
+    if (!ctx && !init()) return;
+    if (ctx.state !== 'running') { armedAt = performance.now(); ctx.resume().catch(() => {}); }
+  }
+  const btn = () => $('#snd');
+  function show() { const b = btn(); if (b) b.setAttribute('aria-pressed', String(want)); }
+  function set(v) {
+    want = v;
+    try { localStorage.setItem('sb-sound', v ? 'on' : 'off'); } catch {}
+    show();
+    if (v) { unlock(); setTimeout(() => { s.on(); if (introLanded) ambient(true); }, 30); }
+    else if (ctx) { ambient(false); setTimeout(() => { if (!want) ctx.suspend().catch(() => {}); }, 400); }
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (!ctx) return;
+    if (document.hidden) ctx.suspend().catch(() => {});
+    else if (want) ctx.resume().catch(() => {});
+  });
+
+  // ---- the box
+  const s = {
+    get wanted() { return want; }, live, unlock, set, show, ambient, motion,
+    // a bar of the barcode prints
+    tick: play(pan => { hiss({ dur: 0.016, type: 'highpass', f0: 3600, q: 0.7, gain: 0.035, pan }); tone({ f0: 5400, dur: 0.01, gain: 0.006, pan }); }),
+    // the scanner reads the code: a red sweep, then the beep
+    scan: play(() => {
+      hiss({ dur: 0.42, f0: 1300, f1: 5200, q: 3.5, gain: 0.018, attack: 0.08 });
+      tone({ at: 0.38, f0: 1975.5, dur: 0.12, gain: 0.045, attack: 0.004, send: 0.12 });
+      tone({ at: 0.38, f0: 3951, dur: 0.05, gain: 0.01 });
+    }),
+    // it slows down: air
+    whirl: play(ms => hiss({ dur: ms / 1000, f0: 760, f1: 240, q: 0.8, gain: 0.03, attack: ms / 3000 })),
+    // light leaks out under the lid (at: seconds from now)
+    leak: play(at => hiss({ at, dur: 0.6, f0: 2400, f1: 3600, q: 6, gain: 0.012, attack: 0.35, send: 0.6 })),
+    // the lid comes up: it sticks, then lets go with a breath of air (at: when it lets go)
+    lid: play(at => {
+      hiss({ at: at - 0.12, dur: 0.16, f0: 1500, f1: 1050, q: 1.6, gain: 0.05, buf: crinkle });
+      hiss({ at: at - 0.02, dur: 0.38, type: 'lowpass', f0: 260, f1: 1500, q: 0.9, gain: 0.11, attack: 0.07 });
+      tone({ at, f0: 125, f1: 72, dur: 0.22, gain: 0.12, attack: 0.012 });
+    }),
+    // the light inside: an open fifth that swells and rings in the room
+    glow: play(at => {
+      [110, 164.8, 220, 329.6].forEach((f, i) => tone({ at: at + i * 0.04, f0: f * rnd(0.998, 1.002), dur: 2.6, gain: [0.03, 0.022, 0.016, 0.01][i], attack: 0.55, send: 0.55 }));
+      tone({ at: at + 0.2, f0: 1318.5, dur: 1.6, gain: 0.004, attack: 0.5, send: 0.8 });
+    }),
+    // the fall, and the landing: a thud with a knock of board in it, the lid settling
+    drop: play(ms => {
+      const land = ms / 1000;
+      hiss({ dur: land, f0: 300, f1: 1000, q: 0.7, gain: 0.045, attack: land * 0.8 });
+      tone({ at: land, f0: 88, f1: 44, dur: 0.34, gain: 0.3, attack: 0.004 });
+      hiss({ at: land, dur: 0.13, type: 'lowpass', f0: 950, f1: 280, q: 0.6, gain: 0.24, attack: 0.002 });
+      hiss({ at: land, dur: 0.05, f0: 1900, q: 2, gain: 0.06 });
+      hiss({ at: land + 0.075, dur: 0.045, f0: 1250, q: 3, gain: 0.035 });
+    }),
+    // the lid pops off and flies
+    pop: play(() => {
+      tone({ f0: 320, f1: 140, dur: 0.09, gain: 0.15, attack: 0.002 });
+      hiss({ dur: 0.07, f0: 1150, q: 1.2, gain: 0.1 });
+      hiss({ at: 0.03, dur: 0.5, f0: 520, f1: 2600, q: 0.8, gain: 0.045, attack: 0.12 });
+    }),
+    // tissue paper flung open, one sheet each way
+    rustle: play(at => {
+      hiss({ at, dur: 0.46, type: 'highpass', f0: 1600, q: 0.5, gain: 0.2, attack: 0.03, buf: crinkle, pan: -0.45 });
+      hiss({ at: at + 0.05, dur: 0.42, type: 'highpass', f0: 1800, q: 0.5, gain: 0.18, attack: 0.03, buf: crinkle, pan: 0.45 });
+      hiss({ at, dur: 0.32, f0: 2600, f1: 1300, q: 0.7, gain: 0.025, attack: 0.05 });
+    }),
+    // a pair flies out: a flick, panned to where it's going
+    flick: play((at, pan) => { const r = rnd(0.85, 1.15); hiss({ at, dur: rnd(0.045, 0.07), f0: 3300 * r, f1: 1400 * r, q: 1.3, gain: rnd(0.045, 0.07), pan }); }),
+    // the empty box sinks away
+    sink: play(() => { hiss({ dur: 0.7, type: 'lowpass', f0: 800, f1: 170, q: 0.7, gain: 0.05, attack: 0.18 }); }),
+
+    // ---- the wall and the window
+    // a soft wooden note per tile, on a pentatonic scale across the wall
+    plink: play((col, row, pan) => {
+      const n = performance.now(); if (n - plinkAt < 40) return; plinkAt = n;
+      const steps = [0, 2, 4, 7, 9], k = col + row * 2;
+      const f = 392 * Math.pow(2, (steps[k % 5] + 12 * (Math.floor(k / 5) % 2)) / 12);
+      tone({ f0: f, dur: 0.24, gain: 0.026, attack: 0.002, pan, send: 0.18 });
+      tone({ f0: f * 2.76, dur: 0.045, gain: 0.005, pan });
+    }),
+    // a filter's light wave crossing the wall
+    wave: play(pan => {
+      hiss({ dur: 0.75, f0: 900, f1: 5200, q: 4, gain: 0.02, attack: 0.14, send: 0.4, pan });
+      tone({ at: 0.04, f0: 1318.5, dur: 0.9, gain: 0.012, send: 0.6, pan });
+      tone({ at: 0.13, f0: 1760, dur: 0.8, gain: 0.009, send: 0.6, pan });
+    }),
+    open: play(() => { hiss({ dur: 0.34, type: 'lowpass', f0: 300, f1: 1700, q: 0.9, gain: 0.07, attack: 0.05 }); tone({ f0: 140, f1: 92, dur: 0.17, gain: 0.08, attack: 0.008 }); }),
+    close: play(() => { hiss({ dur: 0.24, type: 'lowpass', f0: 1500, f1: 320, q: 0.9, gain: 0.05, attack: 0.03 }); tone({ at: 0.16, f0: 150, f1: 104, dur: 0.1, gain: 0.07, attack: 0.004 }); }),
+    size: play(() => { tone({ f0: 1250, f1: 880, glide: 0.03, dur: 0.06, gain: 0.032, attack: 0.002 }); hiss({ dur: 0.012, type: 'highpass', f0: 2600, gain: 0.025 }); }),
+    // the order is ready: two notes of a small bell
+    ready: play(() => {
+      tone({ f0: 659.3, dur: 1, gain: 0.04, send: 0.5 }); tone({ f0: 659.3 * 2.4, dur: 0.18, gain: 0.005 });
+      tone({ at: 0.09, f0: 987.8, dur: 1.2, gain: 0.036, send: 0.5 }); tone({ at: 0.09, f0: 987.8 * 2.4, dur: 0.22, gain: 0.005 });
+    }),
+    copy: play(() => { tone({ f0: 880, dur: 0.12, gain: 0.025 }); tone({ at: 0.07, f0: 1318.5, dur: 0.32, gain: 0.025, send: 0.4 }); }),
+    swipe: play(() => hiss({ dur: 0.09, f0: 2700, f1: 1800, q: 1, gain: 0.02 })),
+    flip: play(() => hiss({ dur: 0.16, f0: 1700, f1: 3300, q: 0.9, gain: 0.13, buf: crinkle })),
+    on: play(() => { tone({ f0: 523.3, dur: 0.2, gain: 0.035 }); tone({ at: 0.08, f0: 784, dur: 0.4, gain: 0.035, send: 0.4 }); }),
+  };
+  return s;
+})();
 
 // The box is printed in both languages: the current one on the front, the other on the back.
 const boxFront = $('#tb-headline'), tbAlt = $('#tb-alt');
@@ -119,6 +356,7 @@ function applyLang() {
   document.querySelectorAll('[data-i18n]').forEach(el => { const v = t(el.dataset.i18n); if (el.textContent !== v) el.textContent = v; });
   printBox(boxFront, lang); printBox(tbAlt, lang === 'ka' ? 'en' : 'ka');
   document.querySelectorAll('[data-i18n-label]').forEach(el => el.setAttribute('aria-label', t(el.dataset.i18nLabel)));
+  $('#tb-tap-text').textContent = t('tapOpen');
   $('#lang').textContent = t('langBtn');
   $('#lang').setAttribute('aria-label', t('langLabel'));
   $('#filters').setAttribute('aria-label', t('brands'));
@@ -393,7 +631,9 @@ async function loadTextures() {
         bmp.close && bmp.close();
         S.hiReady[i] = 1; pendingMips++;
         introProgress(++loaded);
-        if (!mipTimer) mipTimer = setTimeout(flushMips, 120);
+        // the sharp tiles' smaller sizes are made in batches: often once the wall shows, rarely while
+        // the closed box still hides it (each batch redoes the whole set, which is work for the GPU)
+        if (!mipTimer) mipTimer = setTimeout(flushMips, introOpenedAt || introDone ? 120 : 1000);
       } catch {}
     }
   };
@@ -486,7 +726,12 @@ function frame(now) {
 
   // which pair sits under the light: it brightens, and lets go as smoothly as it came
   const h = S.k > 0.35 && !sheetPair ? cellAt(S.lx, S.ly + S.stageTop) : -1;
+  if (h !== S.hover && h >= 0 && introLanded && (S.mode === 'mouse' || S.mode === 'touch')) {
+    const col = h % L.cols;
+    snd.plink(col, Math.floor(h / L.cols), ((col + 0.5) / L.cols - 0.5) * 1.2);
+  }
   S.hover = h;
+  if (S.mode === 'mouse' || S.mode === 'touch') snd.motion(Math.hypot(S.lx - px, S.ly - py) / dt);
   // the mouse only: the tile under the pointer lifts. Nothing new lifts while the page
   // scrolls (like a browser's own hover), then the tile that ends up under it does.
   const lt = S.mouseIn && introLanded && !sheetPair && now - S.scrollAt > 140 ? cellAt(S.mx, S.my) : -1;
@@ -697,6 +942,7 @@ function renderSizePop() {
 }
 function openSizePop() {
   renderSizePop();
+  snd.size();
   sizePop.classList.add('open'); sizePop.setAttribute('aria-hidden', 'false');
   $('#size-chip')?.setAttribute('aria-expanded', 'true');
   ($('#size-grid [aria-pressed="true"]') || $('#size-grid .size:not(:disabled)'))?.focus({ preventScroll: true });
@@ -735,6 +981,7 @@ function applyFilter(b, instant = false, from = null) {
     S.filtNext[i] = on;
     S.filtAt[i] = now + Math.min(650, Math.hypot(r.x + r.w / 2 - from.x, r.y + r.h / 2 - from.y) / 1.5);
   }
+  if (from && !instant) snd.wave((from.x / innerWidth - 0.5) * 1.2);
   filters.querySelectorAll('.chip[data-brand]').forEach(c => c.setAttribute('aria-pressed', String(c.dataset.brand === b)));
   // the plain grid (no WebGL) shows the same thing: matching photos in colour
   document.querySelectorAll('#fallback button').forEach(btn => btn.classList.toggle('lit', active && matches(pairs.get(btn.dataset.pair))));
@@ -808,7 +1055,7 @@ function fillSheet(pairId, key, resetSize = true) {
   $('#sheet-price').textContent = price(p);
   const photosOf = [key, ...p.photos.filter(k => k !== key)];
   if (resetSize) {
-    gallery.innerHTML = '';
+    gallery.innerHTML = ''; photoAt = 1;
     photosOf.forEach((k, i) => gallery.append(pictureFor(k, i === 0)));
     gallery.scrollLeft = 0;
   }
@@ -836,7 +1083,11 @@ function fillSheet(pairId, key, resetSize = true) {
     b.disabled = sold;
     if (sold) b.setAttribute('aria-label', `${s}, ${t('soldOut')}`);
     b.setAttribute('aria-pressed', String(pickedSize === s));
-    b.addEventListener('click', () => { pickedSize = s; fillSizesState(); ignite(); navigator.vibrate?.(8); });
+    b.addEventListener('click', () => {
+      const first = pickedSize == null;
+      pickedSize = s; fillSizesState(); ignite(); navigator.vibrate?.(8);
+      snd.size(); if (first) setTimeout(snd.ready, 70);             // the order is ready: a small bell
+    });
     box.append(b);
   }
   fillSizesState();
@@ -902,9 +1153,11 @@ function switchPair(id) {
   };
 }
 
+let photoAt = 1;
 function updateCount() {
   const n = gallery.children.length;
   const i = Math.min(n, Math.round(gallery.scrollLeft / Math.max(1, gallery.clientWidth)) + 1);
+  if (i !== photoAt) { photoAt = i; if (sheetPair && !opening) snd.swipe(); }
   $('#gallery-count').textContent = t('photo', i, n);
   thumbs.querySelectorAll('button').forEach((b, k) => b.setAttribute('aria-current', String(k === i - 1)));
 }
@@ -932,7 +1185,7 @@ $('#sheet-share').addEventListener('click', async () => {
   const p = pairs.get(sheetPair); if (!p) return;
   const url = location.origin + location.pathname + '#' + p.id;
   if (navigator.share && touchFirst) { try { await navigator.share({ title: `${name(p)} • Sneakerbox`, text: `${name(p)}, ${price(p)}`, url }); } catch {} return; }
-  try { await navigator.clipboard.writeText(url); toast(t('linkCopied')); } catch { toast(url); }
+  try { await navigator.clipboard.writeText(url); toast(t('linkCopied')); snd.copy(); } catch { toast(url); }
 });
 
 $('#order').addEventListener('click', async e => {
@@ -990,6 +1243,7 @@ function openSheet(pairId, key, fromRect, cell = -1) {
   filters.classList.add('hidden');
   label.classList.remove('on');
   S.tdim = 1; S.tk = 0; invalidate();
+  snd.open();
   if (location.hash !== '#' + pairId) history.pushState({ sheet: pairId }, '', '#' + pairId);
   $('#sheet-close').focus({ preventScroll: true });
 
@@ -1023,6 +1277,7 @@ function closeSheet(fromHistory = false) {
   const key = sheetKey, dragged = sheetWin.style.transform || 'none';
   sheetPair = null; sheetCell = -1;
   sheetAnims.forEach(a => a.cancel()); sheetAnims = [];
+  snd.close();
   sheet.setAttribute('aria-hidden', 'true');
   html.style.overflow = '';
   filters.classList.remove('hidden');
@@ -1111,9 +1366,14 @@ function toast(msg) {
 // ---------------------------------------------------------------- language
 $('#lang').addEventListener('click', () => {
   lang = lang === 'ka' ? 'en' : 'ka';
+  snd.flip();
   try { localStorage.setItem('sb-lang', lang); } catch {}
   applyLang();
 });
+
+// ---------------------------------------------------------------- sound switch
+snd.show();
+$('#snd').addEventListener('click', () => snd.set(!snd.wanted));
 
 // ---------------------------------------------------------------- no WebGL: plain grid
 function buildFallback() {
@@ -1134,20 +1394,29 @@ function buildFallback() {
   html.classList.add('laid');
 }
 
-// ---------------------------------------------------------------- start
 // ---------------------------------------------------------------- intro: the box
-// While the photos load, the shop's box turns in the middle of a dark screen over a barcode
-// that prints one bar per photo. Once they're in, a scanner reads the code, the box slows to
-// face you and the lid lifts with light inside. Then it drops to the bottom of the screen,
-// the lid swings open, and the pairs fly out of it to their places on the wall, nearest
-// first, each landing lit and settling into the dark. The empty box sinks out of view.
-// A tap or a key skips it.
+// While the photos load, the shop's box turns and floats in the middle of a dark screen over a
+// barcode that prints one bar per photo. Once they're in, it waits a moment to be opened: the
+// tap that opens it is what lets it make a sound (untouched, it opens by itself, quietly). A
+// scanner reads the code, the box slows to face you, light leaks out under the lid and the lid
+// comes up on tissue paper glowing from underneath. It drops to the bottom of the screen, the
+// lid pops off, the tissue is flung open, and the pairs fly out of the light to their places on
+// the wall, nearest first, each landing lit and settling into the dark. The empty box sinks out
+// of view. Once it's opening, a tap or a key skips to the wall.
 let introDone = !html.classList.contains('intro');    // the light is free (from the moment the box opens)
 let introLanded = introDone;                           // the wall is complete: labels, the mouse lift
-let introSkip = false, introLoaded = 0;
+let introSkip = false, introLoaded = 0, introAsked = false, introOpenedAt = 0, tapResolve = null;
 const introAnims = [], cardAnims = [];
 const tbFly = $('#tb-fly'), tbObj = $('#tb-obj'), tbLid = $('#tb-lid'), tbPersp = $('.tb-persp'), cardsEl = $('#cards');
 const SPIN_MS = 2800;                                  // one turn of the loader (matches the CSS)
+
+// The light on the outside: how dark a face is at an angle (0 = facing you, the key light front-left).
+// The CSS keyframes (tb-light) are this, sampled, for the turn while loading; the slow-down uses it here.
+const shadeAt = phi => { const c = Math.max(0, Math.cos((phi + 38) * Math.PI / 180)); return Math.min(0.62, Math.max(0, (1 - (0.5 + 0.5 * c ** 1.3)) * 1.1)); };
+const faceLights = [...document.querySelectorAll('.tb-lt')].map(el => {
+  const c = el.parentElement.classList, is = (...n) => n.some(x => c.contains(x));
+  return { el, ph: is('tb-right', 'lid-right') ? 90 : is('tb-back', 'lid-back') ? 180 : is('tb-left', 'lid-left') ? 270 : 0 };
+});
 
 // The loader: a barcode prints one bar per photo (at most 40) and the count rolls like an odometer.
 const tbCode = $('#tb-code'), tbScan = $('#tb-scan'), tbCount = $('#tb-count'), tbLoad = $('#tb-load');
@@ -1182,7 +1451,9 @@ function introProgress(n) {
   const s = String(n).padStart(rollCols.length, '0');
   rollCols.forEach((col, d) => { col.style.transform = `translateY(${-Number(s[d])}em)`; });
   const lit = Math.round(n / photos.length * BARS);
-  bars.forEach((b, i) => b.classList.toggle('on', i < lit));
+  let fresh = -1;
+  bars.forEach((b, i) => { const on = i < lit; if (on !== b.classList.contains('on')) { b.classList.toggle('on', on); if (on) fresh = i; } });
+  if (fresh >= 0) snd.tick((fresh / BARS - 0.5) * 0.6);
 }
 
 // Waits in the intro run on the same timeline as its animations (an empty animation of that
@@ -1208,14 +1479,45 @@ function introGate() {
   });
 }
 
+// the box is ready: it waits for a tap to open it (which also lets it make a sound), a short while
+function tapToOpen(ms) {
+  titleBox.dataset.phase = 'ready';
+  tbLoad.classList.add('ready');
+  return Promise.race([new Promise(r => { tapResolve = r; }), introWait(ms)]).then(() => { tapResolve = null; });
+}
+
 function skipIntro() {
   introSkip = true;
+  if (tapResolve) tapResolve();
   introAnims.forEach(a => a.finish());
   cardAnims.forEach(a => a.finish());
 }
-// until the wall is complete, a tap or a key only skips (it can't open a pair half-way)
-addEventListener('pointerdown', e => { if (!introLanded) { e.stopPropagation(); skipIntro(); } }, true);
-addEventListener('keydown', () => { if (!introLanded) skipIntro(); }, true);
+// Before the box opens, a tap (or Enter, or Space) opens it, with sound; once it's opening, a
+// tap or a key skips to the wall. Until the wall is complete a tap can't open a pair half-way.
+// (A mouse button counts as a gesture as it goes down, a finger as it lifts.)
+function introTap() {
+  if (introLanded) return;
+  if (!introOpenedAt) { introAsked = true; if (tapResolve) tapResolve(); return; }
+  if (performance.now() - introOpenedAt > 450) skipIntro();
+}
+addEventListener('pointerdown', e => {
+  if (e.pointerType === 'mouse') snd.unlock();
+  if (introLanded) return;
+  e.stopPropagation();
+  if (e.pointerType === 'mouse') introTap();
+}, true);
+addEventListener('pointerup', e => {
+  if (e.pointerType === 'mouse') return;
+  snd.unlock();
+  if (!introLanded) introTap();
+}, true);
+addEventListener('touchend', () => snd.unlock(), { capture: true, passive: true });
+addEventListener('click', () => snd.unlock(), true);
+addEventListener('keydown', e => {
+  if (e.key !== 'Escape') snd.unlock();
+  if (introLanded) return;
+  if (!introOpenedAt && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); introTap(); } else skipIntro();
+}, true);
 
 async function playIntro() {
   if (introDone) return;
@@ -1223,8 +1525,14 @@ async function playIntro() {
   introProgress(introLoaded);
   await introGate();
   if (introDone) return;
+  bars.forEach(b => b.classList.add('on'));
+  // ready: unless it's been asked for already (or the sound is off), the box waits to be opened
+  if (!introAsked && !introSkip && snd.wanted && !snd.live()) await tapToOpen(1800);
+  else tbLoad.classList.add('ready');
+  introOpenedAt = performance.now();
+  titleBox.classList.add('inside');                      // the inside of the box is drawn from here (the lid still on it)
   // a page that isn't being drawn (a background tab, say) never lets its animations finish:
-  // if the intro hasn't reached the wall 12 s after it was ready, it skips to it
+  // if the intro hasn't reached the wall 12 s after it began opening, it skips to it
   setTimeout(() => { if (!introLanded) skipIntro(); }, 12000);
 
   const b = { h: tbFly.offsetHeight, d: $('.tb-right').offsetWidth, ld: $('.lid-left').offsetWidth };
@@ -1232,76 +1540,168 @@ async function playIntro() {
   // the lid tips back on its back edge as it lifts; later it pops off and flies away (z: back into the dark)
   const lidT = (lift, deg, z = 0) => `translateY(${-b.h / 2 - lift}px) translateZ(${-b.ld / 2 + z}px) rotateX(${deg}deg) translateZ(${b.ld / 2}px)`;
   const LIFT = Math.round(b.h * 0.3);
-  const glow = $('.tb-glow'), spill = $('.tb-spill'), shadow = $('.tb-shadow');
+  const shadow = $('.tb-shadow'), contact = $('.tb-contact'), spill = $('.tb-spill'), beam = $('#tb-beam'), seam = $('.tb-seam'), lamp = $('.tb-lamp'), pool = $('.tb-pool');
+  const warm = [...document.querySelectorAll('.tb-warm')], dims = [...document.querySelectorAll('.ts-dim')];
+  // Each step's animation on an element replaces the last one there (it starts where that one
+  // ended, and holds its first frame through any delay), so an element only ever has one and it
+  // runs off the main thread. (Asking the element for its animations would restyle the page.)
+  const last = new Map();
   const run = (el, keyframes, opts) => {
-    const a = el.animate(keyframes, { fill: 'forwards', ...opts });
-    introAnims.push(a);
+    last.get(el)?.cancel();
+    const a = el.animate(keyframes, { fill: 'both', ...opts });
+    last.set(el, a); introAnims.push(a);
     if (introSkip) a.finish();
     return a;
   };
+  const fade = (els, from, to, opts) => els.forEach(el => run(el, [{ opacity: from }, { opacity: to }], opts));
 
-  // 0. the barcode is complete: a scanner line reads it, and the loader steps back as the lid opens
-  bars.forEach(b => b.classList.add('on'));
+  // 0. the scanner reads the code, and the loader steps back as the box turns to you
+  titleBox.dataset.phase = 'scan';
+  snd.scan();
   run(tbScan, [{ transform: 'translateX(0)', opacity: 0 }, { opacity: 1, offset: 0.12 }, { opacity: 1, offset: 0.86 }, { transform: `translateX(${tbCode.offsetWidth + 2}px)`, opacity: 0 }],
     { duration: 460, easing: 'cubic-bezier(.45,0,.3,1)' });
   run(tbLoad, [{ opacity: 1 }, { opacity: 0 }], { duration: 260, delay: 520, easing: 'linear' });
 
-  // 1. catch the spin where it is (and the shadow turning with it)
+  // 1. catch the turn where it is: the box, the light on its faces, its float, its shadow
   const spin = tbObj.getAnimations()[0];
   const ang = spin && spin.currentTime != null ? (Number(spin.currentTime) % SPIN_MS) / SPIN_MS * 360 : 0;
-  const shadowScale = getComputedStyle(shadow).scale;
-  tbObj.style.animation = 'none';
-  tbObj.style.transform = objT(-20, ang);
-  shadow.style.animation = 'none';
-  run(shadow, [{ scale: shadowScale === 'none' ? '1 1' : shadowScale, opacity: 1 }, { scale: '1 1', opacity: 1 }], { duration: 700, easing: 'cubic-bezier(.3,.6,.2,1)' });
+  const shTurn = $('.tb-shadow > i'), shFloat = $('.tb-shadow > i > i');
+  const ps = getComputedStyle(tbPersp), floatT = ps.transform, floatY = ps.translate;
+  const shadowScale = getComputedStyle(shTurn).scale, shadowOp = getComputedStyle(shFloat).opacity;
+  tbObj.style.animation = 'none'; tbObj.style.transform = objT(-20, ang);
+  tbPersp.style.animation = shadow.style.animation = shTurn.style.animation = shFloat.style.animation = 'none';
+  shadow.style.opacity = '1';
+  faceLights.forEach(f => { f.el.style.animation = 'none'; f.el.style.opacity = shadeAt(f.ph + ang).toFixed(3); });
+  void tbObj.offsetWidth;                                // (the CSS turns are gone before anything takes over)
+  run(tbPersp, [{ transform: floatT, translate: floatY === 'none' ? '0px 0px' : floatY }, { transform: 'none', translate: '0px 0px' }], { duration: 700, easing: 'cubic-bezier(.3,.6,.2,1)' });
+  run(shTurn, [{ scale: shadowScale === 'none' ? '1 1' : shadowScale }, { scale: '1 1' }], { duration: 700, easing: 'cubic-bezier(.3,.6,.2,1)' });
+  run(shFloat, [{ opacity: shadowOp }, { opacity: 1 }], { duration: 700, easing: 'cubic-bezier(.3,.6,.2,1)' });
 
-  // 2. slow to face front, leaving the spin at the speed it had; the lid lifts and light spills
+  // 2. it slows to face you, leaving the turn at the speed it had (the light on its faces with it).
+  //    Light leaks out under the lid; the lid sticks for a moment, then comes up on glowing tissue.
   const target = 360 * Math.ceil((ang + 70) / 360), R = target - ang;
   const v0 = 360 / SPIN_MS;                             // degrees per ms
   const dur = Math.min(1150, Math.max(620, R / v0 * 1.25));
   const x1 = 0.3, y1 = Math.min(1, v0 * dur / R * x1);
-  run(tbObj, [{ transform: objT(-20, ang) }, { transform: objT(-16, target) }], { duration: dur, easing: `cubic-bezier(${x1},${y1.toFixed(3)},.22,1)` });
-  const pop = Math.max(0, dur - 280);
-  run(tbLid, [{ transform: lidT(0, 0) }, { transform: lidT(LIFT, 16) }], { duration: 520, delay: pop, easing: 'cubic-bezier(.25,1.35,.45,1)' });
-  run(glow, [{ opacity: 0 }, { opacity: 1 }], { duration: 320, delay: pop + 40, easing: 'ease-out' });
-  run(spill, [{ opacity: 0 }, { opacity: 1 }], { duration: 380, delay: pop + 60, easing: 'ease-out' });
-  await introWait(pop + 420);
+  const turn = `cubic-bezier(${x1},${y1.toFixed(3)},.22,1)`;
+  run(tbObj, [{ transform: objT(-20, ang) }, { transform: objT(-16, target) }], { duration: dur, easing: turn });
+  const N = Math.max(2, Math.ceil(R / 15));
+  faceLights.forEach(f => run(f.el, Array.from({ length: N + 1 }, (_, k) => ({ opacity: shadeAt(f.ph + ang + R * k / N) })), { duration: dur, easing: turn }));
+  snd.whirl(dur);
+  const pop = Math.max(0, dur - 300), LID = 760, held = 0.3;      // the lid lets go 30% in
+  const free = pop + LID * held;
+  run(seam, [{ opacity: 0 }, { opacity: 1, offset: 0.55 }, { opacity: 1, offset: 0.8 }, { opacity: 0 }], { duration: 400 + LID * held + 160, delay: Math.max(0, pop - 400), easing: 'linear' });
+  snd.leak(Math.max(0, pop - 400) / 1000);
+  run(tbLid, [
+    { transform: lidT(0, 0), easing: 'cubic-bezier(.3,0,.4,1)' },
+    { transform: lidT(b.h * 0.02, 1.6), offset: held * 0.5, easing: 'ease-in-out' },
+    { transform: lidT(b.h * 0.012, 0.9), offset: held, easing: 'cubic-bezier(.25,1.3,.45,1)' },
+    { transform: lidT(LIFT, 16) },
+  ], { duration: LID, delay: pop });
+  snd.lid(free / 1000);
+  fade(dims, 0.8, 0, { duration: 460, delay: free, easing: 'ease-out' });        // the tissue lights up
+  fade(warm, 0, 1, { duration: 520, delay: free + 30, easing: 'ease-out' });     // and the board and the lid around it
+  run(spill, [{ opacity: 0 }, { opacity: 1 }], { duration: 460, delay: free + 40, easing: 'ease-out' });
+  snd.glow(free / 1000);
+  await introWait(free);
+  titleBox.dataset.phase = 'lift';
+  await introWait(380);
 
-  // 3. the drop: down to the bottom middle of the screen, landing with a squash
+  // 3. the drop: down to the bottom middle of the screen, landing with a little give and some dust
+  titleBox.dataset.phase = 'drop';
   const vh = innerHeight, ls = parseFloat(getComputedStyle(titleBox).getPropertyValue('--ls')) || 0.7;
   const dropY = Math.round(vh - Math.max(44, vh * 0.065) - b.h * ls * 0.5 - vh * 0.44);
   html.classList.add('revealing', 'unboxing');
   html.classList.remove('intro');
   readScroll();
   const DROP = 560;
+  snd.drop(DROP);
   const drop = run(titleBox, [{ transform: 'translateY(0)' }, { transform: `translateY(${dropY}px)` }], { duration: DROP, easing: 'cubic-bezier(.52,0,.78,.38)' });
   run(tbObj, [{ transform: objT(-16, target) }, { transform: objT(-24, target) }], { duration: DROP, easing: 'ease-in' });
   tbPersp.style.transformOrigin = '50% 100%';
-  run(tbPersp, [{ transform: 'none' }, { transform: 'scale(1.07, .86)', offset: 0.32 }, { transform: 'scale(.98, 1.04)', offset: 0.68 }, { transform: 'none' }],
-    { duration: 340, delay: DROP, easing: 'ease-out' });
-  run(shadow, [{ opacity: 1 }, { opacity: 0.1 }], { duration: DROP * 0.6, easing: 'ease-out' });
-  run(shadow, [{ scale: '.7 .7', opacity: 0.1 }, { scale: '1.32 1.15', opacity: 1, offset: 0.45 }, { scale: '1.08 1', opacity: 1 }],
-    { duration: 480, delay: DROP - 40, easing: 'ease-out' });
+  run(tbPersp, [{ transform: 'none' }, { transform: 'scale(1.03, .95)', offset: 0.28 }, { transform: 'translateY(-1.2%) scale(.994, 1.012)', offset: 0.62 }, { transform: 'none' }],
+    { duration: 400, delay: DROP, easing: 'ease-out' });
+  // its shadow: fading as it falls, then spreading out from under it as it lands
+  const SH = DROP + 440, at = ms => ms / SH;
+  run(shadow, [
+    { opacity: 1, scale: '1 1', easing: 'ease-out' },
+    { opacity: 0.1, scale: '.8 .8', offset: at(DROP * 0.6) },
+    { opacity: 0.1, scale: '.7 .7', offset: at(DROP - 40), easing: 'ease-out' },
+    { opacity: 1, scale: '1.32 1.15', offset: at(DROP + 176), easing: 'ease-out' },
+    { opacity: 1, scale: '1.08 1' },
+  ], { duration: SH });
+  run(contact, [{ opacity: 0 }, { opacity: 1 }], { duration: 110, delay: DROP - 30, easing: 'ease-out' });
   await drop.finished.then(() => {}, () => {});
+  if (!introSkip) requestAnimationFrame(dust);          // (its own frame)
 
-  // 4. landed: the lid pops off, tipping its printed top to you, and is gone; light comes up out of the box
+  // 4. down: the lid pops off and flies; the tissue is flung open both ways and the light stands up out of the box
+  titleBox.dataset.phase = 'open';
+  snd.pop(); snd.rustle(0.07);
   run(tbLid, [{ transform: lidT(LIFT, 16) }, { transform: lidT(b.h * 2.6, -46, -b.ld * 0.5) }], { duration: 600, easing: 'cubic-bezier(.2,.62,.3,1)' });
   tbLid.querySelectorAll('.tb-face').forEach(f => run(f, [{ opacity: 1 }, { opacity: 0 }], { duration: 340, delay: 200, easing: 'ease-in' }));
+  // the tissue parts down the middle: both sheets pushed back to their ends, bunching, lifting a little
+  document.querySelectorAll('.tsh').forEach((h, i) => run(h,
+    [{ transform: 'none' }, { transform: `translateY(${-b.h * 0.07}px) scaleX(.56)`, offset: 0.42 }, { transform: `translateY(${-b.h * 0.035}px) scaleX(.64)` }],
+    { duration: 640, delay: 60 + i * 40, easing: 'cubic-bezier(.2,.75,.3,1)' }));
+  fade(dims, 0, 0.14, { duration: 500, delay: 170 });                  // parted, a little off the lamp
+  run(lamp, [{ opacity: 0 }, { opacity: 1 }], { duration: 320, delay: 90, easing: 'ease-out' });
+  run(pool, [{ opacity: 0 }, { opacity: 1 }], { duration: 260, delay: 80, easing: 'ease-out' });
+  run(spill, [{ opacity: 1 }, { opacity: 0 }], { duration: 300, easing: 'ease-in' });
+  run(beam, [{ opacity: 0, transform: 'scaleY(.35)' }, { opacity: 1, transform: 'scaleY(1)' }], { duration: 640, delay: 90, easing: 'cubic-bezier(.2,.7,.3,1)' });
+  if (!introSkip) introWait(140).then(() => { if (!introSkip) motes(beam); });
   const fr = $('.tb-front').getBoundingClientRect();
-  const mouth = { x: fr.left + fr.width / 2, y: fr.top + Math.min(10, fr.height * 0.08), w: fr.width };
-  releaseLight(mouth.x, mouth.y - fr.height * 0.4);
+  const mouth = { x: fr.left + fr.width / 2, y: fr.top, w: fr.width };
+  // the pairs come out over the box, but behind its front wall: out of it
+  cardsEl.style.zIndex = '71';
+  cardsEl.style.clipPath = `polygon(0 0, 100% 0, 100% 100%, ${(fr.right + 1).toFixed(1)}px 100%, ${(fr.right + 1).toFixed(1)}px ${(fr.top + 1).toFixed(1)}px, ${(fr.left - 1).toFixed(1)}px ${(fr.top + 1).toFixed(1)}px, ${(fr.left - 1).toFixed(1)}px 100%, 0 100%)`;
+  releaseLight(mouth.x, mouth.y - fr.height * 0.6);
 
-  // 5. the pairs come out, nearest first
+  // 5. the pairs come out of the light, nearest first
+  await introWait(150);
   const pairsOut = burst(mouth);
   await introWait(pairsOut.launched + 240);
 
-  // 6. the empty box sinks out of view
+  // 6. the empty box sinks out of view, the light going out of it
+  titleBox.dataset.phase = 'sink';
+  snd.sink();
   run(titleBox, [{ transform: `translateY(${dropY}px)` }, { transform: `translateY(${dropY + Math.round(vh * 0.62)}px)` }], { duration: 600, easing: 'cubic-bezier(.5,0,.8,.4)' });
-  run(glow, [{ opacity: 1 }, { opacity: 0 }], { duration: 420, easing: 'ease-in' });
-  run(spill, [{ opacity: 1 }, { opacity: 0 }], { duration: 360 });
-  run(shadow, [{ opacity: 1 }, { opacity: 0 }], { duration: 260 });
+  run(beam, [{ opacity: 1 }, { opacity: 0 }], { duration: 420, easing: 'ease-in' });
+  fade([lamp, pool, ...warm], 1, 0.15, { duration: 520 });
+  fade(dims, 0.14, 0.75, { duration: 520 });
+  run(shadow, [{ opacity: 1, scale: '1.08 1' }, { opacity: 0, scale: '1.08 1' }], { duration: 260 });
+  run(contact, [{ opacity: 1 }, { opacity: 0 }], { duration: 200 });
   await Promise.all([introWait(620), pairsOut.landed]);
   finishIntro();
+}
+
+// dust off the floor where the box lands, out from under its bottom edge
+function dust() {
+  const fr = $('.tb-front').getBoundingClientRect(), box = $('#tb-dust'), y = fr.bottom - 3;
+  for (let k = 0; k < 16; k++) {
+    const p = document.createElement('i'), side = k % 2 ? 1 : -1, u = Math.random();
+    const x = fr.left + fr.width * (side > 0 ? 0.6 + 0.42 * u : 0.4 - 0.42 * u);
+    const dx = side * (18 + Math.random() * 64) * (0.5 + fr.width / 900), dy = -(3 + Math.random() * 14), s0 = 0.45 + Math.random() * 0.45;
+    box.append(p);
+    introAnims.push(p.animate([
+      { transform: `translate(${x}px, ${y}px) scale(${s0})`, opacity: 0 },
+      { opacity: 0.85, offset: 0.14 },
+      { transform: `translate(${x + dx}px, ${y + dy}px) scale(${s0 * 2.7})`, opacity: 0 },
+    ], { duration: 640 + Math.random() * 480, easing: 'cubic-bezier(.15,.7,.3,1)', fill: 'forwards' }));
+  }
+}
+// dust turning in the light that stands out of the open box
+function motes(beam) {
+  const W = beam.offsetWidth, H = beam.offsetHeight;
+  for (let k = 0; k < 18; k++) {
+    const m = document.createElement('i'), x = W * (0.22 + Math.random() * 0.56), y0 = H * Math.random() * 0.2;
+    const rise = H * (0.18 + Math.random() * 0.34), drift = (Math.random() - 0.5) * W * 0.12, s = 0.5 + Math.random() * 0.9;
+    beam.append(m);
+    introAnims.push(m.animate([
+      { transform: `translate(${x}px, ${-y0}px) scale(${s})`, opacity: 0 },
+      { opacity: 0.4 + Math.random() * 0.5, offset: 0.25 },
+      { transform: `translate(${x + drift}px, ${-y0 - rise}px) scale(${s})`, opacity: 0 },
+    ], { duration: 1500 + Math.random() * 1300, delay: Math.random() * 500, easing: 'cubic-bezier(.3,.4,.4,1)', fill: 'both' }));
+  }
 }
 
 // The pairs fly out of the box to their places on the wall. Those on screen travel as cards
@@ -1317,27 +1717,35 @@ function burst(mouth) {
   out.sort((a, b) => a.d - b.d);                        // nearest first, with a little scatter
   const gap = out.length ? Math.min(46, 880 / out.length) : 0;
   invalidate();
-  return { launched: out.length * gap, landed: Promise.all(out.map((c, n) => launchCard(c.i, c.r, mouth, n * gap))) };
+  // each card is made as it goes (on the intro's clock), so no one frame has to build them all
+  return { launched: out.length * gap, landed: Promise.all(out.map((c, n) => introWait(n * gap).then(() => launchCard(c.i, c.r, mouth, 0)))) };
 }
 
 function launchCard(i, r, mouth, delay) {
   const outer = document.createElement('div'), inner = document.createElement('div');
   outer.className = 'card'; inner.className = 'card-in';
   inner.style.width = r.w + 'px'; inner.style.height = r.h + 'px';
-  const img = new Image(); img.src = tileURL(photos[cells[i]].key); img.alt = '';
+  const img = new Image(); img.decoding = 'async'; img.src = tileURL(photos[cells[i]].key); img.alt = '';
   inner.append(img); outer.append(inner); cardsEl.append(outer);
-  // out of the box's mouth, small and turning; up and across on an arc to its place
-  const sx = mouth.x + (Math.random() - 0.5) * mouth.w * 0.45 - r.w / 2, sy = mouth.y - r.h / 2;
+  // from inside the box (its front wall hides it), small and turning, up out of it and across on an arc to its place
+  const s0 = Math.min(0.32, mouth.w * 0.3 / r.w);
+  const sx = mouth.x + (Math.random() - 0.5) * mouth.w * 0.4 - r.w / 2, sy = mouth.y + r.h * s0 * 0.55 - r.h / 2;
   const turn = (Math.random() - 0.5) * 30;
   const duration = Math.min(1100, 560 + Math.hypot(r.x - sx, r.y - sy) * 0.3);
-  const ax = outer.animate([{ transform: `translateX(${sx}px)` }, { transform: `translateX(${r.x}px)` }],
-    { duration, delay, fill: 'both', easing: 'cubic-bezier(.3,.5,.25,1)' });
+  // first straight up and out of the box (a fifth of the way), then across to its place
+  const s1 = s0 * 1.3, y1 = mouth.y - r.h * s1 * 0.62 - r.h / 2, out = 0.2;
+  const ax = outer.animate([
+    { transform: `translateX(${sx}px)`, easing: 'linear' },
+    { transform: `translateX(${sx + (r.x - sx) * 0.05}px)`, offset: out, easing: 'cubic-bezier(.3,.45,.25,1)' },
+    { transform: `translateX(${r.x}px)` },
+  ], { duration, delay, fill: 'both' });
   const ay = inner.animate([
-    { transform: `translateY(${sy}px) scale(.12) rotate(${turn}deg)`, opacity: 0 },
-    { opacity: 1, offset: 0.1 },
-    { transform: `translateY(${r.y}px) scale(1) rotate(0deg)`, opacity: 1 },
-  ], { duration, delay, fill: 'both', easing: 'cubic-bezier(.1,.7,.2,1)' });
+    { transform: `translateY(${sy}px) scale(${s0}) rotate(${turn}deg)`, easing: 'cubic-bezier(.25,.6,.45,1)' },
+    { transform: `translateY(${y1}px) scale(${s1}) rotate(${turn * 0.75}deg)`, offset: out, easing: 'cubic-bezier(.2,.62,.2,1)' },
+    { transform: `translateY(${r.y}px) scale(1) rotate(0deg)` },
+  ], { duration, delay, fill: 'both' });
   cardAnims.push(ax, ay);
+  snd.flick(delay / 1000, Math.max(-0.8, Math.min(0.8, ((r.x + r.w / 2) / innerWidth - 0.5) * 1.6)));
   if (introSkip) { ax.finish(); ay.finish(); }
   return new Promise(res => {
     ax.onfinish = () => {
@@ -1365,16 +1773,23 @@ function finishIntro() {
   html.classList.add('unboxed');                        // the box is gone
   html.classList.remove('intro', 'unboxing');
   introAnims.splice(0).forEach(a => a.cancel());
-  cardsEl.replaceChildren();
-  tbObj.style.transform = ''; tbObj.style.animation = ''; $('.tb-shadow').style.animation = ''; tbPersp.style.transformOrigin = '';
+  cardsEl.replaceChildren(); cardsEl.style.clipPath = cardsEl.style.zIndex = '';
+  $('#tb-dust').replaceChildren(); $('#tb-beam').replaceChildren();
+  tbObj.style.transform = ''; tbObj.style.animation = ''; $('.tb-shadow').style.animation = '';
+  tbPersp.style.transformOrigin = tbPersp.style.animation = '';
+  faceLights.forEach(f => { f.el.style.animation = f.el.style.opacity = ''; });
+  delete titleBox.dataset.phase;
   if (!introDone) releaseLight(L.w * 0.5, L.h * 0.45);
   introDone = introLanded = true;
   for (let i = 0; i < L.count; i++) if (S.landAt[i] === Infinity) S.landAt[i] = 0;   // anything not shown yet is just there
-  // skipped: everything shows at once; played: the staggered fades finish first
-  if (introSkip) html.classList.remove('revealing');
-  else setTimeout(() => html.classList.remove('revealing'), 1400);
+  // skipped: everything shows at once (fades already under way are finished); played: the staggered fades finish first
+  if (introSkip) {
+    html.classList.remove('revealing');
+    if (typeof CSSTransition !== 'undefined') document.getAnimations().forEach(a => { if (a instanceof CSSTransition) a.finish(); });
+  } else setTimeout(() => html.classList.remove('revealing'), 1400);
   hintTop();
   invalidate();
+  snd.ambient(true);
 }
 
 // A shared link (#pair) opens over a clean entry, so Back closes it and stays on the site.
@@ -1392,7 +1807,12 @@ function start() {
   layout(); resize(); readScroll();
   if (!introDone) S.landAt.fill(Infinity);               // the wall is empty until the pairs come out of the box
   S.lx = S.tx = L.w * 0.5; S.ly = S.ty = L.h * 0.4;
-  loadTextures();
+  // the photos start loading once the first frame is up, so nothing competes with it; the tissue
+  // paper for the inside of the box comes in then too, ready long before it opens
+  requestAnimationFrame(() => setTimeout(() => {
+    loadTextures();
+    if (!introDone) new Image().src = 'assets/img/brand/tissue.webp';
+  }, 0));
   invalidate();
   openDeepLink();
   playIntro();
@@ -1400,4 +1820,4 @@ function start() {
   canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); buildFallback(); });
 }
 start();
-window.__sb = { cellRect, cellAt, layerOf, L, S, F, HOLE, get cells() { return cells; }, get introDone() { return introDone; }, get introLanded() { return introLanded; } };
+window.__sb = { cellRect, cellAt, layerOf, L, S, F, HOLE, snd, get cells() { return cells; }, get introDone() { return introDone; }, get introLanded() { return introLanded; } };
