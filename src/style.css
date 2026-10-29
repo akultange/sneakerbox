@@ -93,20 +93,22 @@ html.no-gl .wall canvas { display: none; }
 
 html { scrollbar-gutter: stable; }   /* the intro hides the scrollbar; keep the layout from jumping when it returns */
 
-/* the first screen over the wall: the box on its three slots and the text under it
-   (both placed by the script on the wall's own grid) */
+/* the first screen over the wall: the box on its three slots and the text under it.
+   Both are placed on the wall's own grid and moved by the script in the same frame the
+   wall is drawn, so the box never slips against its slots while the page scrolls. */
 .intro {
-  position: absolute; left: 0; right: 0; top: 0; z-index: 5;
+  position: fixed; left: 0; right: 0; top: 0; z-index: 5;
   height: 100vh; height: 100svh;
   pointer-events: none; visibility: hidden;
   overflow: hidden;                  /* the lid's glow must not widen the page on phones */
 }
 html.laid .intro, html.intro .title-box { visibility: visible; }
-.intro::before {
-  content: ''; position: absolute; inset: 0; z-index: -1;
+html.laid .intro.gone { visibility: hidden; }          /* scrolled on: the box is back in the wall */
+.intro-shade {                       /* keeps the hint readable; fades as the wall scrolls */
+  position: absolute; inset: 0;
   background: linear-gradient(to bottom, rgba(28, 27, 25, 0) 50%, rgba(28, 27, 25, .7) 78%, rgba(28, 27, 25, .9));
 }
-.intro-text { position: absolute; left: var(--pad); right: var(--pad); }
+.intro-text { position: absolute; left: var(--pad); right: var(--pad); will-change: transform, opacity; }
 
 /* ---- the title box ---------------------------------------------------------
    Their box, built in CSS 3D: the creased red paper and the cream wordmark are
@@ -123,6 +125,7 @@ html.laid .intro, html.intro .title-box { visibility: visible; }
   --ls: .78;                                               /* loader scale */
   position: absolute; left: var(--tbx, var(--pad)); top: var(--tby, 0px);
   width: var(--bw); height: var(--bh);
+  will-change: transform;
 }
 html.no-gl .intro { position: relative; height: auto; padding: 92px var(--pad) 24px; visibility: visible; }
 html.no-gl .title-box { position: relative; left: 0; top: 0; }
@@ -131,7 +134,7 @@ html.no-gl .intro-text { position: relative; left: 0; right: 0; margin-top: 22px
 @media (min-width: 900px) { .title-box { --bw: calc((100vw - 98px) / 2 + 20px); --bh: calc((100vw - 98px) / 6); --ls: .62; } }
 @media (min-width: 1340px) { .title-box { --bw: calc((100vw - 108px) * 3 / 7 + 20px); --bh: calc((100vw - 108px) / 7); } }
 .tb-fly { position: absolute; inset: 0; transform-origin: 0 0; }
-.tb-persp { position: absolute; inset: 0; perspective: 1500px; perspective-origin: 50% 35%; }
+.tb-persp { position: absolute; inset: 0; perspective: 1500px; perspective-origin: 50% 35%; will-change: transform, opacity; }
 .tb-obj {
   position: absolute; left: 50%; top: 50%; width: 0; height: 0;
   transform-style: preserve-3d;
@@ -218,13 +221,13 @@ html.intro .title-box { position: fixed; z-index: 70; margin: 0; left: calc(50% 
 html.intro .tb-fly { transform-origin: 50% 50%; transform: scale(var(--ls)); }
 html.intro .tb-obj { animation: tb-spin 2.8s linear infinite; }
 html.intro .tb-load { opacity: 1; }
-html.intro .wall-stage, html.intro .top, html.intro .intro-text, html.intro .intro::before, html.intro .fallback { opacity: 0; }
+html.intro .wall-stage, html.intro .top, html.intro .intro-text, html.intro .intro-shade, html.intro .fallback { opacity: 0; }
 html.intro .filters { opacity: 0; transform: translateY(100%); }
 @keyframes tb-spin { from { transform: translateZ(calc(var(--bd) / -2)) rotateX(-20deg) rotateY(0deg); } to { transform: translateZ(calc(var(--bd) / -2)) rotateX(-20deg) rotateY(360deg); } }
 html.intro .tile-label { opacity: 0 !important; }
 /* the reveal, while the box flies into place */
 html.revealing .wall-stage { transition: opacity 1000ms linear 80ms; }
-html.revealing .intro::before { transition: opacity 800ms linear 300ms; }
+html.revealing .intro-shade { transition: opacity 800ms linear 300ms; }
 html.revealing .top { transition: opacity 500ms linear 700ms; }
 html.revealing .intro-text { transition: opacity 500ms linear 860ms; }
 html.revealing .tb-load { opacity: 0; transition: none; }
@@ -309,37 +312,53 @@ footer nav { display: flex; gap: 18px; }
 footer nav a { color: var(--paper); text-decoration-color: var(--line); text-underline-offset: 4px; }
 footer small { font-size: 13px; line-height: 1.5; max-width: 52ch; }
 
-/* product sheet */
-.sheet {
-  position: fixed; inset: 0; z-index: 40;
-  display: grid; grid-template-rows: auto 1fr;
+/* ---- the pair window ------------------------------------------------------------
+   It opens over the wall like the box being opened: a strip of the box's red paper on
+   top, the photos, then the details. A bottom sheet on phones (the wall stays visible
+   above it), a window from tablet width up. Motion is driven by the script. */
+.sheet { position: fixed; inset: 0; z-index: 40; visibility: hidden; pointer-events: none; }
+.sheet.open { visibility: visible; pointer-events: auto; }
+.sheet-backdrop { position: absolute; inset: 0; background: rgba(14, 13, 12, .52); }
+.sheet-win {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: calc(100% - max(7vh, 52px) - env(safe-area-inset-top));
+  display: flex; flex-direction: column;
   background: var(--asphalt);
-  overflow-y: auto; overscroll-behavior: contain;
-  visibility: hidden; opacity: 0;
-  transition: opacity 220ms linear, visibility 0s linear 220ms;
+  border-radius: 16px 16px 0 0; overflow: hidden;
+  box-shadow: 0 -14px 44px rgba(0, 0, 0, .55);
+  will-change: transform;
 }
-.sheet.open { visibility: visible; opacity: 1; transition: opacity 160ms linear; }
+.sheet-lid {
+  position: relative; flex: none; height: 48px;
+  display: flex; align-items: center; gap: 12px; padding: 0 8px 0 18px;
+  background: #841919 url(assets/img/brand/paper.webp) -80px -40px / 900px auto;
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, .35), 0 3px 8px rgba(0, 0, 0, .28);
+  z-index: 2; touch-action: none;                 /* on phones the strip drags the sheet down */
+}
+.sheet-mark { width: 98px; height: auto; }
+.sheet-grip { position: absolute; left: 50%; top: 6px; width: 38px; height: 4px; margin-left: -19px; border-radius: 2px; background: rgba(255, 255, 193, .42); }
 .sheet-close {
-  position: fixed; z-index: 3; top: max(12px, env(safe-area-inset-top)); right: 12px;
-  width: 44px; height: 44px; border-radius: 22px; border: 0;
-  background: rgba(28, 27, 25, .7); cursor: pointer;
-  display: grid; place-items: center;
+  margin-left: auto; width: 40px; height: 40px; border-radius: 20px; border: 0;
+  background: rgba(0, 0, 0, .26); color: var(--cream); cursor: pointer;
+  display: grid; place-items: center; transition: background 140ms linear;
 }
-.sheet-close svg { width: 18px; height: 18px; }
+.sheet-close svg { width: 16px; height: 16px; }
+.sheet-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .gallery { position: relative; }
 .gallery-track {
   display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none;
   overscroll-behavior-x: contain;
 }
 .gallery-track::-webkit-scrollbar { display: none; }
-.gallery-track picture { flex: none; width: 100%; aspect-ratio: 1; scroll-snap-align: start; background: var(--concrete); }
+.gallery-track picture { flex: none; width: 100%; aspect-ratio: 1; scroll-snap-align: start; background: var(--concrete) center / cover; }
 .gallery-track img { width: 100%; height: 100%; object-fit: cover; }
+.gallery-thumbs { display: none; }
 .gallery-count {
-  position: absolute; left: var(--pad); bottom: 12px;
+  position: absolute; right: 12px; bottom: 12px;
   padding: 5px 9px; border-radius: 12px; background: rgba(28, 27, 25, .72);
   font: 600 12px/1 var(--sans); font-variant-numeric: tabular-nums;
 }
-.details { padding: 20px var(--pad) calc(28px + env(safe-area-inset-bottom)); max-width: 560px; }
+.details { padding: 20px var(--pad) calc(28px + env(safe-area-inset-bottom)); }
 .details .maker { font: 600 15px/1.2 var(--sans); color: var(--dust); }
 .details h2 { margin: 2px 0 6px; font: 800 38px/1 var(--sans); letter-spacing: -.025em; color: var(--paper); }
 .details .colorway { margin: 0 0 18px; color: var(--paper); }
@@ -367,7 +386,14 @@ html[lang='en'] .order { font-family: var(--sans); }
 .order[aria-disabled='true'] { opacity: .45; cursor: not-allowed; }
 .order svg { width: 20px; height: 20px; }
 .order-hint { margin: 10px 0 0; min-height: 1.5em; font-size: 14px; color: var(--dust); }
-.details .more { display: inline-block; margin-top: 20px; font-size: 14px; color: var(--dust); text-underline-offset: 4px; }
+.details .more { font-size: 13px; color: var(--dust); text-underline-offset: 4px; }
+.related { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); }
+.related-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 12px; font-size: 14px; color: var(--dust); }
+.related-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.rel { display: grid; gap: 5px; align-content: start; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.rel img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; background: var(--concrete); transition: transform 220ms var(--ease-out), filter 220ms linear; }
+.rel span { font: 600 13px/1.25 var(--sans); color: var(--paper); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rel b { font: 700 13px/1 var(--sans); color: var(--cream); font-variant-numeric: tabular-nums; }
 
 .flyer {
   position: fixed; left: 0; top: 0; z-index: 45; pointer-events: none;
@@ -402,20 +428,45 @@ html.no-gl .fallback button:hover img, html.no-gl .fallback button:focus-visible
   .how { padding-top: 96px; }
   .how h2 { font-size: 46px; }
   html.no-gl .fallback { grid-template-columns: repeat(6, 1fr); gap: 10px; padding: 0 24px; }
-  .sheet { grid-template-columns: minmax(0, 1.1fr) minmax(360px, .9fr); grid-template-rows: 1fr; align-items: center; }
-  .gallery { align-self: stretch; display: grid; align-items: center; padding: 24px 0 24px 28px; }
-  .gallery-track picture { border-radius: 6px; overflow: hidden; }
-  .gallery-count { left: 44px; bottom: 40px; }
-  .details { padding: 40px 48px; }
-  .details h2 { font-size: 52px; }
+  /* a window over the wall from tablet width up */
+  .sheet { display: flex; align-items: center; justify-content: center; }
+  .sheet-backdrop { -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); }
+  .sheet-win {
+    position: relative; left: auto; right: auto; bottom: auto;
+    width: min(620px, 92vw); height: auto; max-height: 90vh;
+    border-radius: 14px;
+    box-shadow: 0 40px 100px rgba(0, 0, 0, .6), 0 0 0 1px rgba(255, 255, 193, .07);
+  }
+  .sheet-grip { display: none; }
   .size-pop { left: var(--pad); right: auto; width: 380px; }
 }
 
+@media (min-width: 1000px) {
+  /* as tall as fits, but never so tall that the details column drops under 420px */
+  .sheet-win { --wh: min(720px, 88vh, calc(92vw - 372px)); width: min(1140px, 92vw); height: var(--wh); max-height: none; }
+  /* the photo column is a square as tall as the window under its paper strip */
+  .sheet-body { display: grid; grid-template-columns: calc(var(--wh) - 48px) minmax(0, 1fr); overflow: hidden; }
+  .gallery { width: 100%; height: 100%; min-width: 0; overflow: hidden; }
+  .gallery-track { height: 100%; }
+  .gallery-track picture { height: 100%; }
+  .gallery-thumbs { position: absolute; left: 14px; bottom: 14px; display: flex; gap: 8px; }
+  .gallery-thumbs button {
+    width: 56px; height: 56px; padding: 0; border: 0; border-radius: 6px; overflow: hidden; cursor: pointer;
+    background: var(--concrete); opacity: .62; outline: 2px solid transparent; outline-offset: 2px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, .4); transition: opacity 160ms linear, outline-color 160ms linear;
+  }
+  .gallery-thumbs button[aria-current='true'] { opacity: 1; outline-color: var(--cream); }
+  .gallery-thumbs img { width: 100%; height: 100%; object-fit: cover; }
+  .gallery-count { display: none; }
+  .details { overflow-y: auto; overscroll-behavior: contain; padding: 30px 36px 26px; }
+  .details h2 { font-size: 46px; }
+}
+
 @media (hover: hover) {
+  .sheet-close:hover { background: rgba(0, 0, 0, .46); }
+  .gallery-thumbs button:hover { opacity: 1; }
+  .rel:hover img { transform: scale(1.03); filter: brightness(1.08); }
   .chip:hover { border-color: rgba(233, 229, 218, .4); }
   .size:not(:disabled):hover { border-color: rgba(233, 229, 218, .5); }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  html:not(.motion) *, html:not(.motion) *::before, html:not(.motion) *::after { transition-duration: 0ms !important; animation-duration: 0ms !important; }
-}

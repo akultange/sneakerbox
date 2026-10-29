@@ -3,6 +3,14 @@ const puppeteer = require('puppeteer-core');
 const m = require('@sparticuz/chromium'); const chromium = m.default || m;
 const [url = 'http://127.0.0.1:8765/', out = 'qa'] = process.argv.slice(2);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+// a tap with its own timestamps (80 ms apart): this software renderer can take most of a
+// second per frame, which would otherwise make a tap look like a long press
+const tapAt = async (p, x, y) => {
+  const c = await p.target().createCDPSession(), t = Date.now() / 1000;
+  await c.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }], timestamp: t });
+  await c.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [], timestamp: t + 0.08 });
+  await c.detach();
+};
 const res = []; const ok = (n, p, i = '') => res.push(`${p ? 'PASS' : 'FAIL'}  ${n}${i ? '  ' + i : ''}`);
 (async () => {
   const b = await puppeteer.launch({ executablePath: await chromium.executablePath(), args: [...chromium.args, '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'], headless: true });
@@ -23,10 +31,9 @@ const res = []; const ok = (n, p, i = '') => res.push(`${p ? 'PASS' : 'FAIL'}  $
     const { S, L } = window.__sb; const cat = JSON.parse(document.querySelector('#catalog').textContent);
     const pairs = new Map(cat.pairs.map(p => [p.id, p]));
     let litOk = true, lit = 0;
-    const { cells, HOLE } = window.__sb;
+    const { layerOf } = window.__sb;
     for (let i = 0; i < L.count; i++) {
-      if (cells[i] === HOLE) { if (S.filtT[i] === 1) litOk = false; continue; }
-      const pr = pairs.get(cat.photos[cells[i]].pair);
+      const pr = pairs.get(cat.photos[layerOf(i)].pair);
       const has = pr.sizes.includes(40) && !pr.soldOut.includes(40);
       if ((S.filtT[i] === 1) !== has) litOk = false;
       if (S.filtT[i] === 1) lit++;
@@ -38,11 +45,13 @@ const res = []; const ok = (n, p, i = '') => res.push(`${p ? 'PASS' : 'FAIL'}  $
   await p.screenshot({ path: `${out}/size-40.png` });
   // open a lit pair: size 40 is already picked, order link carries it
   const cell = await p.evaluate(() => { const { S, L, cellRect } = window.__sb; for (let i = 0; i < L.count; i++) if (S.filtT[i] === 1) { const r = cellRect(i); if (r.y > 70 && r.y + r.h < 600) return { x: r.x + r.w / 2, y: r.y + r.h / 2 }; } return null; });
-  await p.touchscreen.tap(cell.x, cell.y); await sleep(1000);
+  await tapAt(p, cell.x, cell.y);
+  await p.waitForFunction(() => document.querySelector('#sheet').classList.contains('open'), { timeout: 6000 }).catch(() => {}); await sleep(300);
   const sh = await p.evaluate(() => ({ title: document.querySelector('#sheet-title').textContent, picked: document.querySelector('#sizes .size[aria-pressed="true"]')?.textContent, href: decodeURIComponent(document.querySelector('#order').href) }));
   ok('opened pair has size 40 pre-picked', sh.picked === '40' && /40/.test(sh.href), JSON.stringify(sh));
   await p.screenshot({ path: `${out}/size-40-sheet.png` });
-  await p.goBack(); await sleep(600);
+  await p.goBack();
+  await p.waitForFunction(() => !document.querySelector('#sheet').classList.contains('open'), { timeout: 6000 }).catch(() => {}); await sleep(200);
   // clear + Escape
   await p.tap('#size-chip'); await sleep(300);
   await p.keyboard.press('Escape'); await sleep(300);

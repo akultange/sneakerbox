@@ -47,6 +47,35 @@ const DESK = { width: 1916, height: 875, deviceScaleFactor: 1 };
     ok(`${name}: box face sits exactly on its three slots`, fit.d < 1.5, JSON.stringify(fit));
     await p.screenshot({ path: `${out}/intro-end-${name}.png` });
 
+    // scrolling: the box rides with its slots, then goes back into the wall and photos fill them
+    const centres = () => p.evaluate(() => {
+      const { L, cellRect } = window.__sb;
+      const a = cellRect(L.hole.row * L.cols), z = cellRect(L.hole.row * L.cols + L.hole.cols - 1);
+      const r = document.querySelector('.tb-front').getBoundingClientRect();
+      return { dx: +(r.left + r.width / 2 - (a.x + z.x + z.w) / 2).toFixed(2), dy: +(r.top + r.height / 2 - (a.y + a.h / 2)).toFixed(2) };
+    });
+    const settled = () => p.waitForFunction(() => window.__sb.X.p === window.__sb.X.tp, { timeout: 10000 }).then(() => sleep(250), () => {});
+    await p.evaluate(() => scrollTo(0, 45)); await sleep(300); await settled();
+    const ride = await centres();
+    ok(`${name}: box rides with its slots while the wall scrolls`, Math.abs(ride.dx) < 1 && Math.abs(ride.dy) < 1, JSON.stringify(ride));
+    const R = await p.evaluate(() => Math.max(window.__sb.L.hole.y - window.__sb.L.top, window.__sb.L.h * 0.32));
+    await p.evaluate(R => scrollTo(0, R), R); await sleep(300); await settled();
+    const gone = await p.evaluate(() => {
+      const { L, X, cellAt, cellRect, layerOf } = window.__sb, i = L.hole.row * L.cols + 1, c = cellRect(i);
+      return { p: +X.p.toFixed(3), intro: document.querySelector('#intro').className, cell: cellAt(c.x + c.w / 2, c.y + c.h / 2), layer: layerOf(i) };
+    });
+    ok(`${name}: scrolled on, the box goes back in and photos fill its slots`, gone.p === 1 && /gone/.test(gone.intro) && gone.cell >= 0 && gone.layer >= 0, JSON.stringify(gone));
+    await p.screenshot({ path: `${out}/scrolled-${name}.png` });
+    await p.evaluate(() => scrollTo(0, 0)); await sleep(300); await settled();
+    const back = await p.evaluate(() => {
+      const { L, X, cellRect } = window.__sb;
+      const first = cellRect(L.hole.row * L.cols), last = cellRect(L.hole.row * L.cols + L.hole.cols - 1);
+      const r = document.querySelector('.tb-front').getBoundingClientRect();
+      const d = Math.max(Math.abs(r.left - first.x), Math.abs(r.top - first.y), Math.abs(r.width - (last.x + last.w - first.x)), Math.abs(r.height - first.h));
+      return { p: X.p, d: +d.toFixed(2), op: getComputedStyle(document.querySelector('.tb-persp')).opacity };
+    });
+    ok(`${name}: back at the top, the box is flush in its slots again`, back.p === 0 && back.d < 1.5 && back.op === '1', JSON.stringify(back));
+
     // tapping the box opens nothing
     const c = await p.evaluate(() => { const r = document.querySelector('.tb-front').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
     if (name === 'phone') await p.touchscreen.tap(c.x, c.y); else await p.mouse.click(c.x, c.y);
@@ -64,16 +93,18 @@ const DESK = { width: 1916, height: 875, deviceScaleFactor: 1 };
     await p.close();
   }
 
-  // shared pair links and reduced motion go straight in
+  // shared pair links go straight in; a reduced-motion setting still gets the intro on load
   let p = await open(PHONE, { url: url + '#palermo' });
   ok('deep link: no intro', !(await p.evaluate(() => document.documentElement.classList.contains('intro'))));
   await sleep(1200);
   ok('deep link: pair opens', await p.evaluate(() => document.querySelector('#sheet').classList.contains('open')));
   await p.close();
   p = await open(PHONE, { reduced: true });
-  ok('reduced motion: no intro', !(await p.evaluate(() => document.documentElement.classList.contains('intro'))));
-  await sleep(1500);
-  ok('reduced motion: box in place', await p.evaluate(() => document.documentElement.classList.contains('laid')));
+  ok('reduced-motion setting: the intro still plays on load', await p.evaluate(() => document.documentElement.classList.contains('intro')));
+  await sleep(700);
+  ok('reduced-motion setting: the loader counts', /^\d+ \/ \d+$/.test(await p.evaluate(() => document.querySelector('#tb-count').textContent)));
+  await done(p);
+  ok('reduced-motion setting: box lands in its slots', await p.evaluate(() => document.documentElement.classList.contains('laid')));
   await p.close();
 
   // no dark dead end: size 37 disables Lacoste; Lacoste disables the sizes it doesn't have

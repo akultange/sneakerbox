@@ -4,7 +4,11 @@ Spec demo for [Sneakerbox](https://www.facebook.com/sneakerboxonlineshop). Live 
 
 The shop's own on-foot photos form a dark wall. Light follows the finger (or cursor) and shows the colour; tap a pair for its price, the sizes in stock and an order that opens in their Messenger with the text already written. Pick a size and only the pairs in stock in that size light up. Georgian first, with an English toggle.
 
-The headline is printed on the shop's own box (the red creased paper and cream wordmark from their logo), which takes three slots of the wall. On first open the box turns while the photos load, the lid lifts with light inside, and the box slides into its slots as that light starts drifting over the wall. A tap or a key skips it; reduced motion and shared pair links go straight in.
+The headline is printed on the shop's own box (the red creased paper and cream wordmark from their logo), which takes three slots of the wall. On every open the box turns while the photos load, the lid lifts with light inside, and the box slides into its slots as that light starts drifting over the wall. A tap or a key skips it; shared pair links go straight to the pair. Scroll down and the box goes back into the wall while three more pairs fill its slots; scroll back up and it comes out again.
+
+With a mouse, the tile under the pointer lifts a little off the wall and settles back on the same spring when the pointer moves on.
+
+Tap a pair and it opens in a window over the wall (a bottom sheet on phones): the photo flies from its tile into the window, with the sizes in stock, the order button and three more pairs to look at.
 
 Prices are estimates from Tbilisi resellers and the sizes are placeholders until the shop sends its stock list.
 
@@ -28,8 +32,11 @@ tools/
   process_images.py  grades the photos and writes assets/ + catalog.json
   build.py           writes dist/
   og.js              renders the 1200×630 share image from the live wall
-  qa.js, qa-size.js, qa-intro.js  headless checks (touch, history, fallback, reduced motion, size filter, intro, box on its slots)
+  qa.js, qa-size.js, qa-intro.js  headless checks (touch, history, fallback, size filter, intro, box on its slots and on scroll)
   intro-frames.js    records the intro frame by frame
+  scroll-frames.js   records a phone scroll (finger drags) frame by frame
+  window-frames.js   captures the pair window opening, then a related pair
+  hover-frames.js    records the mouse lift: onto a tile, across, and off
   shoot.js           phone + desktop screenshots
 ```
 

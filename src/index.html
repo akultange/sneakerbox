@@ -20,14 +20,12 @@
 <link rel="preload" href="assets/img/atlas-lo.webp" as="fetch" type="image/webp" crossorigin>
 <link rel="preload" href="assets/img/brand/paper.webp" as="image" type="image/webp">
 <script>
-// The box intro plays on a normal visit; reduced motion and shared pair links go straight in
-// (?intro forces it, for showing the demo on a machine with reduced motion on).
-// If the app never starts, the failsafe shows the page anyway.
+// The box intro plays on every visit; a shared pair link (#pair) opens straight on the pair.
+// It always starts at the top of the wall. If the app never starts, the failsafe shows the page anyway.
 (function (d) {
-  var force = /[?&]intro\b/.test(location.search);
-  if (force) d.documentElement.classList.add('motion');
-  if ((!force && matchMedia('(prefers-reduced-motion: reduce)').matches) || location.hash.length > 1) return;
+  if (location.hash.length > 1) return;
   d.documentElement.classList.add('intro');
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
   window.__introFailsafe = setTimeout(function () { d.documentElement.classList.remove('intro'); }, 9000);
 })(document);
 </script>
@@ -49,6 +47,7 @@
   <section class="wall" id="wall" aria-labelledby="wall-title">
     <div class="wall-stage" id="stage"><canvas id="gl" aria-hidden="true"></canvas></div>
     <div class="intro" id="intro">
+      <div class="intro-shade" id="intro-shade" aria-hidden="true"></div>
       <!-- Their own box: the red creased paper and cream wordmark from the logo, the headline printed on its side. -->
       <div class="title-box" id="title-box">
         <div class="tb-fly" id="tb-fly">
@@ -114,27 +113,42 @@
 </div>
 <div class="tile-label" id="label" aria-hidden="true"></div>
 
+<!-- The pair window: opens over the wall like the box being opened. A strip of the box's
+     red paper on top, the photos on the left, the details on the right; a bottom sheet on phones. -->
 <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" aria-hidden="true">
-  <button class="sheet-close" id="sheet-close" type="button" aria-label="დახურვა" data-i18n-label="close">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-  </button>
-  <div class="gallery">
-    <div class="gallery-track" id="gallery"></div>
-    <span class="gallery-count" id="gallery-count"></span>
-  </div>
-  <div class="details">
-    <div class="maker" id="sheet-maker"></div>
-    <h2 id="sheet-title"></h2>
-    <p class="colorway" id="sheet-color"></p>
-    <div class="price-row"><span class="price" id="sheet-price"></span><span class="price-note" data-i18n="priceNote">სავარაუდო ფასი</span></div>
-    <div class="sizes-head"><span data-i18n="sizeTitle">ზომა (EU)</span><span id="size-picked"></span></div>
-    <div class="sizes" id="sizes" role="group" aria-label="ზომა (EU)"></div>
-    <a class="order" id="order" href="https://m.me/sneakerboxonlineshop" target="_blank" rel="noopener" aria-disabled="true">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2C6.36 2 2 6.13 2 11.7c0 2.91 1.19 5.44 3.14 7.17.16.15.26.35.27.57l.05 1.78a.8.8 0 0 0 1.12.71l1.98-.88a.8.8 0 0 1 .53-.04c.91.25 1.87.38 2.91.38 5.64 0 10-4.13 10-9.7S17.64 2 12 2Zm6 7.46-2.94 4.66a1.5 1.5 0 0 1-2.17.4l-2.34-1.75a.6.6 0 0 0-.72 0l-3.16 2.4c-.42.32-.97-.18-.69-.63l2.94-4.66a1.5 1.5 0 0 1 2.17-.4l2.34 1.75a.6.6 0 0 0 .72 0l3.16-2.4c.42-.32.97.18.69.63Z"/></svg>
-      <span data-i18n="order">შეკვეთა Messenger-ში</span>
-    </a>
-    <p class="order-hint" id="order-hint" data-i18n="pickSize">ჯერ აირჩიე ზომა.</p>
-    <a class="more" id="sheet-fb" href="https://www.facebook.com/sneakerboxonlineshop" target="_blank" rel="noopener" data-i18n="onFacebook">ეს წყვილი Facebook-ზე</a>
+  <div class="sheet-backdrop" id="sheet-backdrop"></div>
+  <div class="sheet-win" id="sheet-win">
+    <div class="sheet-lid" id="sheet-lid">
+      <i class="sheet-grip" aria-hidden="true"></i>
+      <img class="sheet-mark" src="assets/img/brand/wordmark.webp" width="757" height="106" alt="Sneakerbox">
+      <button class="sheet-close" id="sheet-close" type="button" aria-label="დახურვა" data-i18n-label="close">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="sheet-body" id="sheet-body">
+      <div class="gallery">
+        <div class="gallery-track" id="gallery"></div>
+        <div class="gallery-thumbs" id="gallery-thumbs"></div>
+        <span class="gallery-count" id="gallery-count"></span>
+      </div>
+      <div class="details">
+        <div class="maker" id="sheet-maker"></div>
+        <h2 id="sheet-title"></h2>
+        <p class="colorway" id="sheet-color"></p>
+        <div class="price-row"><span class="price" id="sheet-price"></span><span class="price-note" data-i18n="priceNote">სავარაუდო ფასი</span></div>
+        <div class="sizes-head"><span data-i18n="sizeTitle">ზომა (EU)</span><span id="size-picked"></span></div>
+        <div class="sizes" id="sizes" role="group" aria-label="ზომა (EU)"></div>
+        <a class="order" id="order" href="https://m.me/sneakerboxonlineshop" target="_blank" rel="noopener" aria-disabled="true">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2C6.36 2 2 6.13 2 11.7c0 2.91 1.19 5.44 3.14 7.17.16.15.26.35.27.57l.05 1.78a.8.8 0 0 0 1.12.71l1.98-.88a.8.8 0 0 1 .53-.04c.91.25 1.87.38 2.91.38 5.64 0 10-4.13 10-9.7S17.64 2 12 2Zm6 7.46-2.94 4.66a1.5 1.5 0 0 1-2.17.4l-2.34-1.75a.6.6 0 0 0-.72 0l-3.16 2.4c-.42.32-.97-.18-.69-.63l2.94-4.66a1.5 1.5 0 0 1 2.17-.4l2.34 1.75a.6.6 0 0 0 .72 0l3.16-2.4c.42-.32.97.18.69.63Z"/></svg>
+          <span data-i18n="order">შეკვეთა Messenger-ში</span>
+        </a>
+        <p class="order-hint" id="order-hint" data-i18n="pickSize">ჯერ აირჩიე ზომა.</p>
+        <div class="related">
+          <div class="related-head"><span data-i18n="related">კიდევ ნახე</span><a class="more" id="sheet-fb" href="https://www.facebook.com/sneakerboxonlineshop" target="_blank" rel="noopener" data-i18n="onFacebook">ეს წყვილი Facebook-ზე</a></div>
+          <div class="related-list" id="related"></div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 

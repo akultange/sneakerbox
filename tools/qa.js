@@ -5,6 +5,14 @@ const fs = require('fs');
 const [url = 'http://127.0.0.1:8765/', out = 'qa'] = process.argv.slice(2);
 fs.mkdirSync(out, { recursive: true });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+// a tap with its own timestamps (80 ms apart): this software renderer can take most of a
+// second per frame, which would otherwise make a tap look like a long press
+const tapAt = async (p, x, y) => {
+  const c = await p.target().createCDPSession(), t = Date.now() / 1000;
+  await c.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }], timestamp: t });
+  await c.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [], timestamp: t + 0.08 });
+  await c.detach();
+};
 const results = [];
 const ok = (name, pass, info = '') => results.push(`${pass ? 'PASS' : 'FAIL'}  ${name}${info ? '  ' + info : ''}`);
 
@@ -28,6 +36,10 @@ const ok = (name, pass, info = '') => results.push(`${pass ? 'PASS' : 'FAIL'}  $
     return p;
   };
   const sheetOpen = p => p.evaluate(() => document.querySelector('#sheet').classList.contains('open'));
+  // the software renderer here can take most of a second per frame: wait for the result, not a fixed time
+  const until = (p, fn) => p.waitForFunction(fn, { timeout: 6000 }).catch(() => {});
+  const closed = p => until(p, () => !document.querySelector('#sheet').classList.contains('open'));
+  const opened = p => until(p, () => document.querySelector('#sheet').classList.contains('open'));
 
   // 1. English toggle on phone
   let p = await page();
@@ -43,13 +55,13 @@ const ok = (name, pass, info = '') => results.push(`${pass ? 'PASS' : 'FAIL'}  $
 
   // 2. Tap opens, back button closes
   const c = await p.evaluate(() => { const r = window.__sb.cellRect(window.__sb.L.cols); return { x: r.x + r.w / 2, y: r.y + r.h / 2 }; });
-  await p.touchscreen.tap(c.x, c.y); await sleep(900);
+  await tapAt(p, c.x, c.y); await opened(p); await sleep(300);
   const h1 = await p.evaluate(() => location.hash);
   ok('tap opens sheet + hash', await sheetOpen(p), h1);
-  await p.goBack(); await sleep(700);
+  await p.goBack(); await closed(p);
   ok('back button closes sheet', !(await sheetOpen(p)), await p.evaluate(() => location.hash || '(no hash)'));
   // order without size shakes hint, does not navigate
-  await p.touchscreen.tap(c.x, c.y); await sleep(900);
+  await tapAt(p, c.x, c.y); await opened(p); await sleep(300);
   const before = p.url();
   await p.evaluate(() => document.querySelector('#order').click()); await sleep(300);
   ok('order without size stays on page', p.url() === before && await sheetOpen(p), await p.evaluate(() => document.querySelector('#order-hint').textContent));
@@ -61,14 +73,14 @@ const ok = (name, pass, info = '') => results.push(`${pass ? 'PASS' : 'FAIL'}  $
   ok('deep link #palermo opens Palermo', (await sheetOpen(p)) && t === 'Palermo', t);
   await sleep(500);
   await p.screenshot({ path: `${out}/desktop-sheet.png` });
-  await p.keyboard.press('Escape'); await sleep(500);
+  await p.keyboard.press('Escape'); await closed(p);
   ok('Escape closes sheet', !(await sheetOpen(p)));
   // focus trap: Tab cycles inside the sheet
-  await p.evaluate(() => [...document.querySelectorAll('#pair-list button')][2].click()); await sleep(800);
+  await p.evaluate(() => [...document.querySelectorAll('#pair-list button')][2].click()); await opened(p); await sleep(300);
   let inside = true;
   for (let i = 0; i < 25; i++) { await p.keyboard.press('Tab'); inside = inside && await p.evaluate(() => document.querySelector('#sheet').contains(document.activeElement)); }
   ok('keyboard focus stays in sheet (25 tabs)', inside);
-  await p.keyboard.press('Escape'); await sleep(600);
+  await p.keyboard.press('Escape'); await closed(p); await sleep(200);
   const after = await p.evaluate(() => ({ open: document.querySelector('#sheet').classList.contains('open'), hash: location.hash }));
   ok('deep link then another pair: closing stays closed', !after.open && after.hash === '', JSON.stringify(after));
   // below the wall
@@ -81,17 +93,17 @@ const ok = (name, pass, info = '') => results.push(`${pass ? 'PASS' : 'FAIL'}  $
   const fb = await p.evaluate(() => ({ cls: document.documentElement.className, n: document.querySelectorAll('#fallback button').length }));
   ok('no-WebGL fallback grid', /no-gl/.test(fb.cls) && fb.n > 0, JSON.stringify(fb));
   await p.screenshot({ path: `${out}/nogl-phone.png` });
-  await p.evaluate(() => document.querySelector('#fallback button').click()); await sleep(700);
+  await p.evaluate(() => document.querySelector('#fallback button').click()); await opened(p);
   ok('fallback tile opens sheet', await sheetOpen(p));
   await p.close();
 
-  // 5. Reduced motion: no idle drift
+  // 5. A reduced-motion setting gets the same site: the light still drifts over the wall
   p = await page({ reduced: true });
   await sleep(1200);
   const L1 = await p.evaluate(() => ({ k: +window.__sb.S.k.toFixed(2), x: window.__sb.S.lx, y: window.__sb.S.ly }));
   await sleep(1500);
   const L2 = await p.evaluate(() => ({ k: +window.__sb.S.k.toFixed(2), x: window.__sb.S.lx, y: window.__sb.S.ly }));
-  ok('reduced motion: still light, no drift', L1.k > 0.5 && Math.abs(L1.x - L2.x) + Math.abs(L1.y - L2.y) < 0.5, JSON.stringify([L1, L2]));
+  ok('reduced-motion setting: same light drift', L1.k > 0.5 && Math.abs(L1.x - L2.x) + Math.abs(L1.y - L2.y) > 2, JSON.stringify([L1, L2]));
   await p.screenshot({ path: `${out}/reduced-phone.png` });
   await p.close();
 
@@ -103,6 +115,27 @@ const ok = (name, pass, info = '') => results.push(`${pass ? 'PASS' : 'FAIL'}  $
   const fit = await p.evaluate(() => [...document.querySelectorAll('#wall-title span')].map(s => Math.round(s.getBoundingClientRect().right)));
   ok('360px phone: headline fits', fit.every(r => r <= 360 - 8), JSON.stringify(fit));
   await p.screenshot({ path: `${out}/phone-360.png` });
+  await p.close();
+
+  // 7. Mouse lift: the tile under the pointer lifts and settles back; a finger never lifts one
+  p = await page({ desktop: true });
+  const tileAt = i => p.evaluate(i => { const r = window.__sb.cellRect(i); return { x: r.x + r.w / 2, y: r.y + r.h / 2 }; }, i);
+  const A = await p.evaluate(() => window.__sb.L.cols * 2 + 4), B = A + 1;
+  const a = await tileAt(A), bb = await tileAt(B);
+  await p.mouse.move(a.x - 30, a.y - 30); await p.mouse.move(a.x, a.y, { steps: 4 });
+  await until(p, i => window.__sb.S.lift[i] === 1, A);
+  ok('mouse: the tile under the pointer lifts', await p.evaluate(i => window.__sb.S.lift[i], A) === 1);
+  await p.screenshot({ path: `${out}/lift-desktop.png` });
+  await p.mouse.move(bb.x, bb.y, { steps: 4 });
+  await until(p, (i, j) => window.__sb.S.lift[i] === 0 && window.__sb.S.lift[j] === 1, A, B);
+  const ab = await p.evaluate((i, j) => [window.__sb.S.lift[i], window.__sb.S.lift[j]], A, B);
+  ok('mouse: moving on, the last tile settles back and the next lifts', ab[0] === 0 && ab[1] === 1, JSON.stringify(ab));
+  await p.close();
+  p = await page();
+  const f = await p.evaluate(() => { const r = window.__sb.cellRect(window.__sb.L.cols + 1); return { x: r.x + r.w / 2, y: r.y + r.h / 2 }; });
+  await p.touchscreen.touchStart(f.x, f.y); await sleep(300); await p.touchscreen.touchMove(f.x + 4, f.y + 2); await sleep(500);
+  ok('finger: no tile lifts', await p.evaluate(() => Math.max(...window.__sb.S.lift)) === 0);
+  await p.touchscreen.touchEnd();
   await p.close();
 
   ok('no console errors', errors.length === 0, errors.slice(0, 5).join(' | '));
