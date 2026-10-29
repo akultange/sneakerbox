@@ -1223,6 +1223,9 @@ async function playIntro() {
   introProgress(introLoaded);
   await introGate();
   if (introDone) return;
+  // a page that isn't being drawn (a background tab, say) never lets its animations finish:
+  // if the intro hasn't reached the wall 12 s after it was ready, it skips to it
+  setTimeout(() => { if (!introLanded) skipIntro(); }, 12000);
 
   const b = { h: tbFly.offsetHeight, d: $('.tb-right').offsetWidth, ld: $('.lid-left').offsetWidth };
   const objT = (x, y) => `translateZ(${-b.d / 2}px) rotateX(${x}deg) rotateY(${y}deg)`;
