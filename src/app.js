@@ -18,8 +18,8 @@ const T = {
     h1a: 'რეალური წყვილები.',
     h1b: 'რეალური ფოტოები.',
     hint: touchFirst
-      ? 'თითი გადაატარე კედელს და სინათლე ფერს გაჩვენებს. შეეხე წყვილს, რომ ნახო ზომები და ფასი, ან გახსენი ყუთი.'
-      : 'კურსორი გადაატარე კედელს და სინათლე ფერს გაჩვენებს. დააჭირე წყვილს, რომ ნახო ზომები და ფასი, ან გახსენი ყუთი.',
+      ? 'თითი გადაატარე კედელს და სინათლე ფერს გაჩვენებს. შეეხე წყვილს, რომ ნახო ზომები და ფასი.'
+      : 'კურსორი გადაატარე კედელს და სინათლე ფერს გაჩვენებს. დააჭირე წყვილს, რომ ნახო ზომები და ფასი.',
     count: n => `${n} წყვილი კედელზე`,
     countBrand: (n, b) => `${b}: ${n} წყვილი`,
     countSize: (n, s, b) => `${b ? b + ', ' : ''}ზომა ${s}: ${n} წყვილი მარაგშია`,
@@ -48,7 +48,6 @@ const T = {
     share: 'გაზიარება',
     linkCopied: 'ბმული დაკოპირდა.',
     related: 'კიდევ ნახე',
-    openBox: 'გახსენი ყუთი: შემთხვევითი წყვილი',
     inStock: n => `${n} ზომა მარაგშია`,
     thumb: i => `ფოტო ${i}`,
     close: 'დახურვა',
@@ -61,8 +60,8 @@ const T = {
     h1a: 'Real pairs.',
     h1b: 'Real photos.',
     hint: touchFirst
-      ? 'Slide your finger across the wall and the light shows the color. Tap a pair to see sizes and price, or open the box.'
-      : 'Move across the wall and the light shows the color. Click a pair to see sizes and price, or open the box.',
+      ? 'Slide your finger across the wall and the light shows the color. Tap a pair to see sizes and price.'
+      : 'Move across the wall and the light shows the color. Click a pair to see sizes and price.',
     count: n => `${n} pairs on the wall`,
     countBrand: (n, b) => `${b}: ${n} ${n === 1 ? 'pair' : 'pairs'}`,
     countSize: (n, s, b) => `${b ? b + ', ' : ''}size ${s}: ${n} ${n === 1 ? 'pair' : 'pairs'} in stock`,
@@ -91,7 +90,6 @@ const T = {
     share: 'Share',
     linkCopied: 'Link copied.',
     related: 'More pairs',
-    openBox: 'Open the box: a random pair',
     inStock: (n, total) => `${n} of ${total} sizes in stock`,
     thumb: i => `Photo ${i}`,
     close: 'Close',
@@ -108,21 +106,18 @@ const name = p => p.model ? `${p.brand} ${p.model}` : p.brand;
 const price = p => `${p.price} ₾`;
 
 // The box is printed in both languages: the current one on the front, the other on the back.
-const wallTitle = $('#wall-title'), tbAlt = $('#tb-alt');
+const boxFront = $('#tb-headline'), tbAlt = $('#tb-alt');
 function printBox(el, l) {
   const [a, b] = el.querySelectorAll('span');
   if (a.textContent !== T[l].h1a) a.textContent = T[l].h1a;
   if (b.textContent !== T[l].h1b) b.textContent = T[l].h1b;
   el.classList.toggle('en', l === 'en');
 }
-function applyLang(keepFront = false) {
+function applyLang() {
   html.lang = lang;
   // only touch text that changes: rewriting the same words counts as a new paint
-  document.querySelectorAll('[data-i18n]').forEach(el => {
-    if (el.closest('.tb-front')) return;
-    const v = t(el.dataset.i18n); if (el.textContent !== v) el.textContent = v;
-  });
-  if (!keepFront) { printBox(wallTitle, lang); printBox(tbAlt, lang === 'ka' ? 'en' : 'ka'); }
+  document.querySelectorAll('[data-i18n]').forEach(el => { const v = t(el.dataset.i18n); if (el.textContent !== v) el.textContent = v; });
+  printBox(boxFront, lang); printBox(tbAlt, lang === 'ka' ? 'en' : 'ka');
   document.querySelectorAll('[data-i18n-label]').forEach(el => el.setAttribute('aria-label', t(el.dataset.i18nLabel)));
   $('#lang').textContent = t('langBtn');
   $('#lang').setAttribute('aria-label', t('langLabel'));
@@ -130,6 +125,7 @@ function applyLang(keepFront = false) {
   renderFilters();
   renderCount();
   renderPairList();
+  hintTop();
   if (sheetPair) fillSheet(sheetPair, sheetKey, false);
 }
 
@@ -137,11 +133,10 @@ function applyLang(keepFront = false) {
 const wall = $('#wall'), stage = $('#stage'), canvas = $('#gl');
 const label = $('#label'), intro = $('#intro'), introText = $('#intro-text');
 const titleBox = $('#title-box');
-const L = { w: 0, h: 0, cols: 3, gap: 6, pad: 8, tile: 100, step: 106, top: 64, rows: 0, height: 0, hole: null };
-const HOLE = 0xFFFF;                                    // a cell the box takes
-let cells = new Uint16Array(0);                         // cell -> photo layer, or HOLE
-let holeFill = [];                                      // the photos that take the box's slots once it has gone
-const layerOf = i => cells[i] !== HOLE ? cells[i] : holeFill[i % L.cols];
+const L = { w: 0, h: 0, cols: 3, gap: 6, pad: 8, tile: 100, step: 106, top: 64, rows: 0, height: 0, hintTop: 0 };
+const HOLE = 0xFFFF;                                    // (no cell is left empty any more; kept for the checks)
+let cells = new Uint16Array(0);                         // cell -> photo layer
+const layerOf = i => cells[i];
 
 function layout() {
   const w = stage.clientWidth, h = stage.clientHeight;
@@ -149,37 +144,25 @@ function layout() {
   const gap = w < 520 ? 6 : 10, pad = w < 520 ? 8 : 24;
   const tile = (w - pad * 2 - gap * (cols - 1)) / cols;
   const step = tile + gap, top = w < 520 ? 60 : 76;
-  // The box has its own place on the wall: three slots, the second row on wide
-  // screens; on phones the lowest full row that leaves room for the hint below it.
-  const holeCols = Math.min(3, cols);
-  const holeRow = cols === 3 ? Math.max(1, Math.floor((h - 290 - top) / step)) : 1;
   const minRows = Math.ceil((h * 1.45 - top) / step);
-  const rows = Math.max(Math.ceil((photos.length + holeCols) / cols), minRows, holeRow + 2);
+  const rows = Math.max(Math.ceil(photos.length / cols), minRows);
   const count = Math.min(rows * cols, MAX_CELLS);
   cells = new Uint16Array(count);
-  for (let i = 0, k = 0; i < count; i++) {
-    const inHole = Math.floor(i / cols) === holeRow && i % cols < holeCols;
-    cells[i] = inHole ? HOLE : k++ % photos.length;
-  }
-  // scrolled on, the box goes back into the wall and three more pairs fill its slots
-  // (from the end of the list, so they aren't the ones right next to it)
-  holeFill = Array.from({ length: holeCols }, (_, j) => (photos.length * 2 - holeCols + j) % photos.length);
+  for (let i = 0; i < count; i++) cells[i] = i % photos.length;
   const height = Math.max(top + Math.ceil(count / cols) * step - gap + Math.round(h * 0.18), h);
-  const hole = { row: holeRow, cols: holeCols, x: pad, y: top + holeRow * step, w: holeCols * tile + (holeCols - 1) * gap, h: tile };
-  Object.assign(L, { w, h, cols, gap, pad, tile, step, top, rows: Math.ceil(count / cols), height, count, hole });
+  Object.assign(L, { w, h, cols, gap, pad, tile, step, top, rows: Math.ceil(count / cols), height, count });
   wall.style.height = height + 'px';
-  placeBox();
-}
-
-// the box and the text under it sit exactly on the slots the wall left free
-function placeBox() {
-  const H = L.hole;
-  titleBox.style.setProperty('--tbx', H.x + 'px');
-  titleBox.style.setProperty('--tby', H.y + 'px');
-  titleBox.style.setProperty('--bw', H.w + 'px');
-  titleBox.style.setProperty('--bh', H.h + 'px');
-  introText.style.top = Math.round(H.y + H.h + (L.cols === 3 ? 18 : 22)) + 'px';
+  // the box is three tiles wide and one high
+  const bc = Math.min(3, cols);
+  titleBox.style.setProperty('--bw', bc * tile + (bc - 1) * gap + 'px');
+  titleBox.style.setProperty('--bh', tile + 'px');
+  hintTop();
   html.classList.add('laid');
+}
+// where the hint starts on screen (the idle light keeps above it while it shows)
+function hintTop() {
+  if (!introText.offsetParent) return;
+  L.hintTop = intro.clientHeight - introText.offsetHeight - (parseFloat(getComputedStyle(introText).bottom) || 0);
 }
 
 // cell geometry in viewport pixels
@@ -194,8 +177,7 @@ function cellAt(vx, vy) {          // viewport coords -> cell index or -1
   const col = Math.floor(x / L.step), row = Math.floor(y / L.step);
   if (col >= L.cols || x - col * L.step > L.tile || y - row * L.step > L.tile) return -1;
   const i = row * L.cols + col;
-  if (i >= L.count) return -1;
-  return cells[i] !== HOLE || fillOf(col) > 0.6 ? i : -1;
+  return i < L.count ? i : -1;
 }
 
 // ---------------------------------------------------------------- state
@@ -205,7 +187,7 @@ const S = {
   lx: 0, ly: 0, tx: 0, ty: 0, k: 0, tk: 0,              // light pos, target, intensity
   hover: -1, hide: -1, dim: 0, tdim: 0,
   mx: -1, my: -1, mouseIn: false, scrollAt: -1e9,     // the mouse pointer (viewport px), last scroll
-  breathAt: 0, breathUntil: 0, breaths: 0,             // the box's idle breath (a peek of light)
+  landAt: new Float64Array(MAX_CELLS), flashUntil: 0,  // per tile: when its pair landed (the intro), for the flash
   hl: new Float32Array(MAX_CELLS),                      // per tile: the light's highlight, eased in and out
   lift: new Float32Array(MAX_CELLS), liftV: new Float32Array(MAX_CELLS),   // per tile: mouse lift, on a spring
   filter: 'all', size: null,
@@ -243,7 +225,6 @@ uniform vec3 uView;            // count, scroll, top
 uniform vec3 uLight;           // x, y, radius (css px, stage space)
 uniform float uLightK, uHide, uDim;
 uniform vec2 uLift[8];         // lifted tiles: cell index, amount (biggest first)
-uniform vec4 uBuild;           // landing wave: origin x, y (wall px), time since it started (ms), speed (px/ms)
 uniform sampler2D uLo; uniform vec2 uLoGrid;
 uniform sampler2DArray uHi;
 uniform sampler2D uMeta;
@@ -281,21 +262,13 @@ void main(){
   vec2 local = pos - cell * stepPx;
   ivec2 mi = ivec2(int(clamp(idx, 0.0, 255.0)), 0);
   vec4 meta = texelFetch(uMeta, mi, 0);
-  float hov = texelFetch(uMeta, mi + ivec2(0, 1), 0).r;   // the light's highlight on this tile
+  vec4 m2 = texelFetch(uMeta, mi + ivec2(0, 1), 0);
+  float hov = m2.r;                   // the light's highlight on this tile
+  float appear = m2.g;                // the intro: hidden until its pair has come out of the box
+  float flash = m2.b * 0.65;          // and lit as it lands, settling into the dark
   bool inside = (lifted || (pos.x >= 0.0 && pos.y >= 0.0 && cell.x < cols && local.x <= tile && local.y <= tile))
                 && idx < uView.x && abs(idx - uHide) > 0.5;
-  // meta.a: how empty a slot of the box is. Scrolled on, its photos grow into place.
-  float fill = 1.0 - meta.a;
-  float sc = mix(0.86, 1.0, fill) * (1.0 + ${LIFT} * lift);
-  // landing: the wall builds out from the box, each tile growing in lit, then settling dark
-  float appear = 1.0, flash = 0.0;
-  if (uBuild.w > 0.0) {
-    float lp = clamp((uBuild.z - distance(cell * stepPx + tile * 0.5, uBuild.xy) / uBuild.w) / 620.0, 0.0, 1.0);
-    float x1 = lp - 1.0;
-    sc *= mix(0.55, 1.0, 1.0 + 2.70158 * x1 * x1 * x1 + 1.70158 * x1 * x1);
-    appear = smoothstep(0.0, 0.3, lp);
-    flash = lp > 0.0 ? 0.62 * (1.0 - smoothstep(0.12, 1.0, lp)) : 0.0;
-  }
+  float sc = 1.0 + ${LIFT} * lift;
   vec2 lc = (local - tile * 0.5) / sc + tile * 0.5;
 
   float d = distance(frag, uLight.xy);
@@ -318,7 +291,7 @@ void main(){
   // rounded tile corners, antialiased
   vec2 q = abs(lc - tile * 0.5) - (tile * 0.5 - 5.0);
   float r = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - 5.0;
-  float edge = clamp(0.5 - r * sc * uDpr, 0.0, 1.0) * (inside ? fill * appear : 0.0);
+  float edge = clamp(0.5 - r * sc * uDpr, 0.0, 1.0) * (inside ? appear : 0.0);
 
   // the light also falls on the gaps, faintly, like on a real wall
   vec3 col = mix(bg + vec3(0.050, 0.044, 0.034) * lightF, tileCol, edge);
@@ -349,7 +322,7 @@ function initGL() {
   const loc = gl.getAttribLocation(prog, 'p');
   gl.enableVertexAttribArray(loc);
   gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-  for (const n of ['uRes', 'uDpr', 'uLayout', 'uView', 'uLight', 'uLightK', 'uHide', 'uDim', 'uLo', 'uLoGrid', 'uHi', 'uMeta', 'uLift', 'uBuild'])
+  for (const n of ['uRes', 'uDpr', 'uLayout', 'uView', 'uLight', 'uLightK', 'uHide', 'uDim', 'uLo', 'uLoGrid', 'uHi', 'uMeta', 'uLift'])
     U[n] = gl.getUniformLocation(prog, n);
 
   // low-res atlas: a 1x1 placeholder until it arrives
@@ -364,7 +337,7 @@ function initGL() {
   gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 9, gl.RGBA8, 320, 320, photos.length);
   setFilter(gl.TEXTURE_2D_ARRAY, true);
 
-  // per-cell data. Row 0: layer, brand-filter light, full-res ready, empty slot. Row 1: highlight.
+  // per-cell data. Row 0: layer, brand-filter light, full-res ready. Row 1: highlight, shown, flash.
   texMeta = gl.createTexture();
   metaBuf = new Uint8Array(MAX_CELLS * 4 * 2);
   gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, texMeta);
@@ -429,15 +402,6 @@ async function loadTextures() {
 }
 let loGrid = [16, 1], loReady = false;
 
-// The landing wave: armed when the box starts its flight (tiles hidden), it starts from the
-// box's slots as the box arrives and reaches the farthest tile on screen in about 0.9 s.
-let build = null;
-function armBuild(delay) {
-  const H = L.hole, x = H.w / 2, y = H.y - L.top + H.h / 2;
-  const far = Math.max(...[[-L.pad, -L.top], [L.w - L.pad, -L.top], [-L.pad, L.h - L.top], [L.w - L.pad, L.h - L.top]].map(([cx, cy]) => Math.hypot(cx - x, cy - y)));
-  build = { x, y, t0: performance.now() + delay, speed: far / 900, end: 900 + 640 };
-  invalidate();
-}
 
 function resize() {
   dpr = Math.min(devicePixelRatio || 1, 2);
@@ -448,21 +412,20 @@ function resize() {
 
 function draw() {
   if (!gl) return;
+  const now = performance.now();
   for (let i = 0; i < L.count; i++) {
-    const hole = cells[i] === HOLE, layer = layerOf(i);
+    const layer = cells[i], land = S.landAt[i], j = (MAX_CELLS + i) * 4;
     metaBuf[i * 4] = layer;
     metaBuf[i * 4 + 1] = Math.round(S.filt[i] * 255);
     metaBuf[i * 4 + 2] = S.hiReady[layer] === 2 ? 255 : 0;
-    metaBuf[i * 4 + 3] = hole ? Math.round((1 - fillOf(i % L.cols)) * 255) : 0;
-    metaBuf[(MAX_CELLS + i) * 4] = Math.round(S.hl[i] * 255);
+    metaBuf[j] = Math.round(S.hl[i] * 255);
+    metaBuf[j + 1] = now >= land ? 255 : 0;                                           // landed (0 = always there)
+    metaBuf[j + 2] = land > 0 && now >= land ? Math.round(Math.max(0, 1 - (now - land) / 700) * 255) : 0;
   }
   gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, texMeta);
   gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, MAX_CELLS, 2, gl.RGBA, gl.UNSIGNED_BYTE, metaBuf);
   for (let j = 0; j < 8; j++) { liftU[j * 2] = j < liftN ? liftI[j] : 0; liftU[j * 2 + 1] = j < liftN ? liftK[j] : 0; }
   gl.uniform2fv(U.uLift, liftU);
-  const bt = build ? performance.now() - build.t0 : 0;
-  if (build && bt > build.end) build = null;
-  gl.uniform4f(U.uBuild, build ? build.x : 0, build ? build.y : 0, bt, build ? build.speed : 0);
   gl.uniform2f(U.uRes, canvas.width, canvas.height);
   gl.uniform1f(U.uDpr, dpr);
   gl.uniform4f(U.uLayout, L.pad, L.gap, L.tile, L.cols);
@@ -515,11 +478,11 @@ function frame(now) {
     S.filt[i] = Math.abs(f - S.filtT[i]) > 0.004 ? f : S.filtT[i];
   }
 
-  // the box: scrolled on, it goes back into the wall (eased, so coarse scroll steps still glide)
-  X.tp = exitTarget();
-  X.p = Math.abs(X.p - X.tp) < 0.002 ? X.tp : approach(X.p, X.tp, dt, 70);
-  if (X.p !== X.tp) moving = true;
-  syncBox();
+  // the hint rides with the wall and fades as it scrolls on (eased, so coarse scroll steps still glide)
+  F.tp = introDone ? clamp01(S.scroll / (L.h * 0.4)) : 0;
+  F.p = Math.abs(F.p - F.tp) < 0.002 ? F.tp : approach(F.p, F.tp, dt, 70);
+  if (F.p !== F.tp) moving = true;
+  syncFirstScreen();
 
   // which pair sits under the light: it brightens, and lets go as smoothly as it came
   const h = S.k > 0.35 && !sheetPair ? cellAt(S.lx, S.ly + S.stageTop) : -1;
@@ -527,11 +490,7 @@ function frame(now) {
   // the mouse only: the tile under the pointer lifts. Nothing new lifts while the page
   // scrolls (like a browser's own hover), then the tile that ends up under it does.
   const lt = S.mouseIn && introLanded && !sheetPair && now - S.scrollAt > 140 ? cellAt(S.mx, S.my) : -1;
-  // the box: a mouse over it lifts the lid a crack; left alone, it breathes now and then
-  const overBox = S.mouseIn && lt < 0 && now - S.scrollAt > 140 && boxOpenable() && inBox(S.mx, S.my);
-  if (S.mouseIn) canvas.classList.toggle('over-tile', lt >= 0 || overBox);
-  if (idle && boxOpenable() && !overBox && now - S.breathAt > 9000 && S.breaths < 3) { S.breathAt = now; S.breaths++; breathe(); }
-  setPeek(overBox || now < S.breathUntil);
+  if (S.mouseIn) canvas.classList.toggle('over-tile', lt >= 0);
   const sdt = dt / 1000, ew = Math.exp(-LIFT_W * sdt);
   liftN = 0;
   for (let i = 0; i < L.count; i++) {
@@ -553,16 +512,9 @@ function frame(now) {
   }
 
   if (placeLabel(dt)) moving = true;
-  lightBox();
   draw();
-  if (build) moving = true;
+  if (now < S.flashUntil) moving = true;
   if (moving || px !== S.lx) invalidate();
-}
-
-// where the box's slots are on screen right now (the wall's own numbers, no layout read)
-function boxRect() {
-  const H = L.hole, top = H.y - S.scroll + S.stageTop;
-  return { left: H.x, top, right: H.x + H.w, bottom: top + H.h, height: H.h };
 }
 
 // the lifted tiles for the shader, biggest first (at most eight; a ninth is a tile all but settled)
@@ -574,105 +526,29 @@ function pushLift(i, x) {
   if (liftN < 8) liftN++;
 }
 
-function driftBottom() {
-  if (!L.hole) return L.h;
-  const r = boxRect();
-  if (X.p > 0.5 || r.bottom <= L.top + L.tile) return L.h;   // box gone or scrolled away: roam the whole view
-  return Math.max(L.top + L.tile, Math.min(r.bottom, L.h));
-}
+// the idle light keeps to the wall above the hint while the hint is on screen
+function driftBottom() { return F.p < 0.5 && L.hintTop > L.top + L.tile ? L.hintTop - 8 : L.h; }
 
-// ---------------------------------------------------------------- the box on scroll
-// The box is moved in the same frame the wall is drawn, by the same scroll the shader uses,
-// so it never slips against its slots. Scroll on and it goes back into the wall: it sinks,
-// darkens and fades while three photos grow into its slots and the hint fades out. Scroll
-// back to the top and it comes forward again. It is tied to the scroll, so it can be scrubbed.
-const X = { p: 0, tp: 0 };
-const tbPersp = $('.tb-persp'), introShade = $('#intro-shade');
+// ---------------------------------------------------------------- the first screen on scroll
+// The hint is moved in the same frame the wall is drawn, by the same scroll the shader uses,
+// and fades as the wall scrolls on; the shade behind it fades with it.
+const F = { p: 0, tp: 0 };
+const introShade = $('#intro-shade');
 const clamp01 = v => Math.min(1, Math.max(0, v));
 const smooth = v => { v = clamp01(v); return v * v * (3 - 2 * v); };
-const fillOf = col => smooth((X.p - 0.42 - col * 0.08) / 0.38);  // the slots fill left to right
-function exitTarget() {
-  if (!introDone || !L.hole || html.classList.contains('no-gl')) return 0;
-  const R = Math.max(L.hole.y - L.top, L.h * 0.32);     // done by the time the slots reach the header
-  return clamp01((S.scroll - R * 0.05) / (R * 0.75));
-}
 const written = new WeakMap();
 function put(el, prop, v) {                             // style writes only when the value changes
   let c = written.get(el); if (!c) written.set(el, c = {});
   if (c[prop] !== v) { c[prop] = v; el.style[prop] = v; }
 }
-function syncBox() {
+function syncFirstScreen() {
   if (!introDone || html.classList.contains('no-gl')) return;
-  const y = +(S.stageTop - S.scroll).toFixed(2), p = X.p;
-  // it goes dark first, then lets go: it never looks like a see-through box
-  const sink = smooth(p / 0.6), fade = smooth((p - 0.38) / 0.42), text = smooth(p / 0.3);
-  put(titleBox, 'transform', y ? `translate3d(0, ${y}px, 0)` : '');
+  const y = +(S.stageTop - S.scroll).toFixed(2), text = smooth(F.p / 0.6);
   put(introText, 'transform', y || text ? `translate3d(0, ${(y - 18 * text).toFixed(2)}px, 0)` : '');
   put(introText, 'opacity', text ? (1 - text).toFixed(3) : '');
-  put(introShade, 'opacity', p ? (1 - smooth(p / 0.5)).toFixed(3) : '');
-  put(tbPersp, 'transform', sink ? `scale(${(1 - 0.15 * sink).toFixed(4)})` : '');
-  put(tbPersp, 'filter', sink ? `brightness(${(1 - 0.7 * sink).toFixed(3)})` : '');
-  put(tbPersp, 'opacity', fade ? (1 - fade).toFixed(3) : '');
-  const gone = p >= 0.999;
+  put(introShade, 'opacity', F.p ? (1 - smooth(F.p)).toFixed(3) : '');
+  const gone = F.p >= 0.999;
   if (intro.classList.contains('gone') !== gone) intro.classList.toggle('gone', gone);
-}
-
-// ---------------------------------------------------------------- the box: peek, flip, open
-let peeking = false, boxBusy = false, boxPick = null;
-const boxOpenable = () => introLanded && !html.classList.contains('no-gl') && X.p < 0.25 && !sheetPair && !boxBusy;
-function inBox(x, y) { const r = boxRect(); return x >= r.left && x <= r.right && y >= r.top - r.height * 0.1 && y <= r.bottom; }
-function setPeek(on) { if (on !== peeking) { peeking = on; titleBox.classList.toggle('peek', on); } }
-function breathe() { S.breathUntil = performance.now() + 1300; setTimeout(invalidate, 1320); }
-const lidHinge = (deg, lift = 0) => {
-  const h = tbFly.offsetHeight, ld = $('.lid-left').offsetWidth;
-  return `translateY(${-h / 2 - lift}px) translateZ(${-ld / 2}px) rotateX(${deg}deg) translateZ(${ld / 2}px)`;
-};
-// the lid pops open with light, and shuts again
-function popLid(hold = 520) {
-  const from = peeking ? 12 : 0;
-  tbLid.animate([{ transform: lidHinge(from) }, { transform: lidHinge(46, 6), offset: 0.28 }, { transform: lidHinge(46, 6), offset: 0.28 + hold / 1500 }, { transform: lidHinge(0) }],
-    { duration: 1500, easing: 'cubic-bezier(.3,.7,.2,1)' });
-  $('.tb-spill').animate([{ opacity: 0 }, { opacity: 0.9, offset: 0.25 }, { opacity: 0.9, offset: 0.28 + hold / 1500 }, { opacity: 0 }], { duration: 1500 });
-  $('.tb-rim').animate([{ opacity: 0 }, { opacity: 1, offset: 0.2 }, { opacity: 1, offset: 0.3 + hold / 1500 }, { opacity: 0 }], { duration: 1500 });
-}
-// where a photo goes into (or comes out of) the box: the opening, just above its front edge
-function boxMouth() { const r = boxRect(), w = r.height * 0.42; return { x: (r.left + r.right) / 2 - w / 2, y: r.top - w * 0.72, w, h: w }; }
-// a tap on the box: a random pair comes out of it (in the size picked, if any)
-function openFromBox() {
-  if (opening || !boxOpenable()) return;
-  const fits = catalog.pairs.filter(p => matches(p) && p.id !== boxPick);
-  const pool = fits.length ? fits : catalog.pairs.filter(p => p.id !== boxPick);
-  const pick = pool[Math.floor(Math.random() * pool.length)];
-  boxPick = pick.id;
-  popLid();
-  setTimeout(() => openSheet(pick.id, pick.photos[0], boxMouth(), -1, true), 160);
-}
-// ENG / ქარ: the box comes forward, turns over to the side printed in the other language, and goes back
-function flipBox(next, done) {
-  if (!boxOpenable() || document.hidden) return done();
-  boxBusy = true; setPeek(false);
-  printBox(tbAlt, next);
-  const d = $('.tb-right').offsetWidth, z0 = -d / 2;
-  // turning this way, the end label faces you halfway round
-  const key = o => { const b = Math.sin(Math.PI * o); return { transform: `translateZ(${(z0 + d * 0.42 * b).toFixed(1)}px) rotateX(${(-8 * b).toFixed(2)}deg) rotateY(${-180 * o}deg)`, offset: o }; };
-  const a = tbObj.animate([0, 0.25, 0.5, 0.75, 1].map(key), { duration: 1050, easing: 'cubic-bezier(.62,0,.32,1)' });
-  a.onfinish = a.oncancel = () => { done(); a.cancel(); boxBusy = false; invalidate(); };
-}
-
-// The wall's light falls on the box as it passes: a soft highlight on its face.
-const tbFront = $('.tb-front');
-let boxLit = 0;
-function lightBox() {
-  if (!introDone || html.classList.contains('no-gl')) return;
-  const r = boxRect();
-  const lx = S.lx, ly = S.ly + S.stageTop;
-  const dx = lx - Math.min(Math.max(lx, r.left), r.right), dy = ly - Math.min(Math.max(ly, r.top), r.bottom);
-  const k = S.k * Math.max(0, 1 - Math.hypot(dx, dy) / (r.height * 1.6)) * 0.34 * (1 - X.p);
-  if (k < 0.004 && boxLit < 0.004) return;
-  boxLit = k;
-  tbFront.style.setProperty('--lx', Math.round(lx - r.left) + 'px');
-  tbFront.style.setProperty('--ly', Math.round(ly - r.top) + 'px');
-  tbFront.style.setProperty('--lk', k.toFixed(3));
 }
 
 // ---------------------------------------------------------------- label
@@ -737,7 +613,6 @@ canvas.addEventListener('pointerup', e => {
   if (moved < 12 && held < 600) {
     const i = cellAt(e.clientX, e.clientY);
     if (i >= 0) openFromCell(i);
-    else if (inBox(e.clientX, e.clientY) && boxOpenable()) openFromBox();
   }
 });
 
@@ -875,10 +750,6 @@ function renderCount() {
 // accessible list of pairs (screen readers, keyboard)
 function renderPairList() {
   const ul = $('#pair-list'); ul.innerHTML = '';
-  const li0 = document.createElement('li'), bx = document.createElement('button');
-  bx.type = 'button'; bx.textContent = t('openBox');
-  bx.addEventListener('click', () => { if (boxOpenable()) openFromBox(); });
-  li0.append(bx); ul.append(li0);
   for (const p of catalog.pairs) {
     const li = document.createElement('li'), b = document.createElement('button');
     b.type = 'button';
@@ -907,7 +778,7 @@ const isCellVisible = i => { const r = cellRect(i); return r.y > 40 && r.y + r.h
 // tablet width up. The photo flies from its place on the wall into the window and back.
 const sheet = $('#sheet'), sheetWin = $('#sheet-win'), sheetBackdrop = $('#sheet-backdrop'), sheetBody = $('#sheet-body');
 const gallery = $('#gallery'), thumbs = $('#gallery-thumbs'), sheetLid = $('#sheet-lid');
-let sheetPair = null, sheetKey = null, sheetCell = -1, pickedSize = null, lastFocus = null, opening = null, sheetFromBox = false;
+let sheetPair = null, sheetKey = null, sheetCell = -1, pickedSize = null, lastFocus = null, opening = null;
 let sheetAnims = [];
 const windowed = () => matchMedia('(min-width: 760px)').matches;
 const sheetRun = (el, keyframes, opts) => { const a = el.animate(keyframes, opts); sheetAnims.push(a); return a; };
@@ -1104,9 +975,8 @@ function flyPhoto(key, from, to, duration, radius = ['5px', '0px'], fadeOut = fa
   return { done, finish: () => anims.forEach(a => a.finish()) };
 }
 
-function openSheet(pairId, key, fromRect, cell = -1, fromBox = false) {
+function openSheet(pairId, key, fromRect, cell = -1) {
   if (opening) return;
-  sheetFromBox = fromBox;
   closeSizePop();
   sheetAnims.forEach(a => a.cancel()); sheetAnims = [];
   lastFocus = document.activeElement;
@@ -1137,7 +1007,7 @@ function openSheet(pairId, key, fromRect, cell = -1, fromBox = false) {
     [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'none' }],
     { duration: 320, delay: 200 + i * 35, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'backwards' }));
   if (!fromRect || !target) return;
-  // the photo flies from its place on the wall (or out of the box) into the window
+  // the photo flies from its place on the wall into the window
   target.style.visibility = 'hidden';
   S.hide = cell; invalidate();
   const f = flyPhoto(key, fromRect, { x: to.left, y: to.top, w: to.width, h: to.height }, win ? 620 : 560);
@@ -1150,9 +1020,8 @@ function closeSheet(fromHistory = false) {
   if (opening) opening.finish();
   const cur = gallery.children[Math.round(gallery.scrollLeft / Math.max(1, gallery.clientWidth))];
   const backCell = sheetCell >= 0 && isCellVisible(sheetCell) && cur === gallery.firstElementChild ? sheetCell : -1;
-  const intoBox = sheetFromBox && cur === gallery.firstElementChild && introLanded && X.p < 0.25 && !html.classList.contains('no-gl');
   const key = sheetKey, dragged = sheetWin.style.transform || 'none';
-  sheetPair = null; sheetCell = -1; sheetFromBox = false;
+  sheetPair = null; sheetCell = -1;
   sheetAnims.forEach(a => a.cancel()); sheetAnims = [];
   sheet.setAttribute('aria-hidden', 'true');
   html.style.overflow = '';
@@ -1163,19 +1032,12 @@ function closeSheet(fromHistory = false) {
   const done = () => { if (sheetPair) return; sheetAnims.forEach(a => a.cancel()); sheetAnims = []; sheet.classList.remove('open'); sheetWin.style.transform = ''; };
 
   const win = windowed();
-  // the photo flies back to its place on the wall, or back into the box it came out of
+  // the photo flies back to its place on the wall
   if (backCell >= 0 && cur) {
     const from = cur.getBoundingClientRect(), to = cellRect(backCell);
     cur.style.visibility = 'hidden';
     flyPhoto(key, { x: from.left, y: from.top, w: from.width, h: from.height }, to, 460, ['0px', '5px'])
       .done.then(() => { cur.style.visibility = ''; S.hide = -1; invalidate(); });
-  } else if (intoBox && cur) {
-    const from = cur.getBoundingClientRect();
-    cur.style.visibility = 'hidden';
-    popLid(220);
-    S.hide = -1; invalidate();
-    flyPhoto(key, { x: from.left, y: from.top, w: from.width, h: from.height }, boxMouth(), 520, ['0px', '6px'], true)
-      .done.then(() => { cur.style.visibility = ''; });
   } else {
     S.hide = -1; invalidate();
   }
@@ -1248,12 +1110,9 @@ function toast(msg) {
 
 // ---------------------------------------------------------------- language
 $('#lang').addEventListener('click', () => {
-  if (boxBusy) return;
-  const next = lang === 'ka' ? 'en' : 'ka';
-  try { localStorage.setItem('sb-lang', next); } catch {}
-  lang = next;
-  applyLang(true);                                      // everything at once, except the box: it turns over
-  flipBox(next, () => applyLang());
+  lang = lang === 'ka' ? 'en' : 'ka';
+  try { localStorage.setItem('sb-lang', lang); } catch {}
+  applyLang();
 });
 
 // ---------------------------------------------------------------- no WebGL: plain grid
@@ -1270,24 +1129,24 @@ function buildFallback() {
   });
   wall.style.height = 'auto';
   $('.wall-stage').style.display = 'none';
-  ['--tbx', '--tby', '--bw', '--bh'].forEach(v => titleBox.style.removeProperty(v));   // the plain layout in CSS takes over
-  [titleBox, introText, tbPersp, introShade].forEach(el => { el.style.transform = el.style.opacity = el.style.filter = ''; written.delete(el); });
+  [introText, introShade].forEach(el => { el.style.transform = el.style.opacity = ''; written.delete(el); });
   intro.classList.remove('gone');
-  introText.style.top = '';
   html.classList.add('laid');
 }
 
 // ---------------------------------------------------------------- start
 // ---------------------------------------------------------------- intro: the box
-// While the photos load, the shop's box turns in the middle of a dark screen with a
-// count under it. Once they're in, it slows to face you, the lid lifts and light
-// spills out; then it slides into its three slots on the wall, flush with the photos,
-// and the light it held drifts out across them. A tap or a key skips it.
-let introDone = !html.classList.contains('intro');
-let introLanded = introDone;                           // pair labels wait until the box has landed
+// While the photos load, the shop's box turns in the middle of a dark screen over a barcode
+// that prints one bar per photo. Once they're in, a scanner reads the code, the box slows to
+// face you and the lid lifts with light inside. Then it drops to the bottom of the screen,
+// the lid swings open, and the pairs fly out of it to their places on the wall, nearest
+// first, each landing lit and settling into the dark. The empty box sinks out of view.
+// A tap or a key skips it.
+let introDone = !html.classList.contains('intro');    // the light is free (from the moment the box opens)
+let introLanded = introDone;                           // the wall is complete: labels, the mouse lift
 let introSkip = false, introLoaded = 0;
-const introAnims = [], introWaits = [];
-const tbFly = $('#tb-fly'), tbObj = $('#tb-obj'), tbLid = $('#tb-lid');
+const introAnims = [], cardAnims = [];
+const tbFly = $('#tb-fly'), tbObj = $('#tb-obj'), tbLid = $('#tb-lid'), tbPersp = $('.tb-persp'), cardsEl = $('#cards');
 const SPIN_MS = 2800;                                  // one turn of the loader (matches the CSS)
 
 // The loader: a barcode prints one bar per photo (at most 40) and the count rolls like an odometer.
@@ -1326,11 +1185,14 @@ function introProgress(n) {
   bars.forEach((b, i) => b.classList.toggle('on', i < lit));
 }
 
-const introWait = ms => new Promise(r => {
-  if (introSkip) return r();
-  const t = setTimeout(r, ms);
-  introWaits.push(() => { clearTimeout(t); r(); });
-});
+// Waits in the intro run on the same timeline as its animations (an empty animation of that
+// length), so a slow frame or a slowed-down timeline can never pull the steps apart.
+const introWait = ms => {
+  if (introSkip || ms <= 0) return Promise.resolve();
+  const a = new Animation(new KeyframeEffect(null, [], { duration: ms }), document.timeline);
+  a.play(); introAnims.push(a);
+  return a.finished.then(() => {}, () => {});
+};
 
 // ready = fonts in, the photos in (or 3.4 s passed with the low-res wall ready), and the box shown ~1 s
 function introGate() {
@@ -1348,12 +1210,12 @@ function introGate() {
 
 function skipIntro() {
   introSkip = true;
-  build = null;
-  introWaits.splice(0).forEach(f => f());
   introAnims.forEach(a => a.finish());
+  cardAnims.forEach(a => a.finish());
 }
-addEventListener('pointerdown', e => { if (!introDone) { e.stopPropagation(); skipIntro(); } }, true);
-addEventListener('keydown', () => { if (!introDone) skipIntro(); }, true);
+// until the wall is complete, a tap or a key only skips (it can't open a pair half-way)
+addEventListener('pointerdown', e => { if (!introLanded) { e.stopPropagation(); skipIntro(); } }, true);
+addEventListener('keydown', () => { if (!introLanded) skipIntro(); }, true);
 
 async function playIntro() {
   if (introDone) return;
@@ -1362,11 +1224,12 @@ async function playIntro() {
   await introGate();
   if (introDone) return;
 
-  const b = { h: tbFly.offsetHeight, d: $('.tb-right').offsetWidth };
+  const b = { h: tbFly.offsetHeight, d: $('.tb-right').offsetWidth, ld: $('.lid-left').offsetWidth };
   const objT = (x, y) => `translateZ(${-b.d / 2}px) rotateX(${x}deg) rotateY(${y}deg)`;
-  // the lid lifts straight up and tips back a little, wordmark still facing you
-  const lidT = (lift, tilt) => `translateY(${-b.h / 2 - lift}px) rotateX(${tilt}deg)`;
-  const LIFT = Math.round(b.h * 0.5);
+  // the lid tips back on its back edge as it lifts; later it pops off and flies away (z: back into the dark)
+  const lidT = (lift, deg, z = 0) => `translateY(${-b.h / 2 - lift}px) translateZ(${-b.ld / 2 + z}px) rotateX(${deg}deg) translateZ(${b.ld / 2}px)`;
+  const LIFT = Math.round(b.h * 0.3);
+  const glow = $('.tb-glow'), spill = $('.tb-spill'), shadow = $('.tb-shadow');
   const run = (el, keyframes, opts) => {
     const a = el.animate(keyframes, { fill: 'forwards', ...opts });
     introAnims.push(a);
@@ -1383,7 +1246,7 @@ async function playIntro() {
   // 1. catch the spin where it is (and the shadow turning with it)
   const spin = tbObj.getAnimations()[0];
   const ang = spin && spin.currentTime != null ? (Number(spin.currentTime) % SPIN_MS) / SPIN_MS * 360 : 0;
-  const shadow = $('.tb-shadow'), shadowScale = getComputedStyle(shadow).scale;
+  const shadowScale = getComputedStyle(shadow).scale;
   tbObj.style.animation = 'none';
   tbObj.style.transform = objT(-20, ang);
   shadow.style.animation = 'none';
@@ -1396,32 +1259,98 @@ async function playIntro() {
   const x1 = 0.3, y1 = Math.min(1, v0 * dur / R * x1);
   run(tbObj, [{ transform: objT(-20, ang) }, { transform: objT(-16, target) }], { duration: dur, easing: `cubic-bezier(${x1},${y1.toFixed(3)},.22,1)` });
   const pop = Math.max(0, dur - 280);
-  run(tbLid, [{ transform: lidT(0, 0) }, { transform: lidT(LIFT, 14) }], { duration: 520, delay: pop, easing: 'cubic-bezier(.25,1.35,.45,1)' });
-  run($('.tb-glow'), [{ opacity: 0 }, { opacity: 1 }], { duration: 320, delay: pop + 40, easing: 'ease-out' });
-  run($('.tb-spill'), [{ opacity: 0 }, { opacity: 1 }], { duration: 380, delay: pop + 60, easing: 'ease-out' });
-  await introWait(pop + 380);
+  run(tbLid, [{ transform: lidT(0, 0) }, { transform: lidT(LIFT, 16) }], { duration: 520, delay: pop, easing: 'cubic-bezier(.25,1.35,.45,1)' });
+  run(glow, [{ opacity: 0 }, { opacity: 1 }], { duration: 320, delay: pop + 40, easing: 'ease-out' });
+  run(spill, [{ opacity: 0 }, { opacity: 1 }], { duration: 380, delay: pop + 60, easing: 'ease-out' });
+  await introWait(pop + 420);
 
-  // 3. into its slot on the wall: measure the loader, lay out the page, fly between them
-  const F = tbFly.getBoundingClientRect();
-  html.classList.add('revealing');
+  // 3. the drop: down to the bottom middle of the screen, landing with a squash
+  const vh = innerHeight, ls = parseFloat(getComputedStyle(titleBox).getPropertyValue('--ls')) || 0.7;
+  const dropY = Math.round(vh - Math.max(44, vh * 0.065) - b.h * ls * 0.5 - vh * 0.44);
+  html.classList.add('revealing', 'unboxing');
   html.classList.remove('intro');
   readScroll();
-  const T = tbFly.getBoundingClientRect();
-  const from = `translate(${F.left - T.left}px, ${F.top - T.top}px) scale(${F.width / T.width})`;
-  const FLY = 1000, ease = 'cubic-bezier(.62,.02,.2,1)';
-  if (!introSkip) armBuild(FLY * 0.62);                  // the wall builds out as the box arrives
-  run(tbFly, [{ transform: from }, { transform: 'none' }], { duration: FLY, easing: ease });
-  run(tbObj, [{ transform: objT(-16, target) }, { transform: objT(0, target) }], { duration: FLY, easing: ease });
-  run(tbLid, [{ transform: lidT(LIFT, 14) }, { transform: lidT(0, 0) }], { duration: 620, delay: 180, easing: 'cubic-bezier(.55,0,.3,1)' });
-  run($('.tb-glow'), [{ opacity: 1 }, { opacity: 0 }], { duration: 520, delay: 160, easing: 'ease-in' });
-  run($('.tb-spill'), [{ opacity: 1 }, { opacity: 0 }], { duration: 600, delay: 60 });
-  run($('.tb-shadow'), [{ opacity: 1 }, { opacity: 0 }], { duration: 420, delay: FLY - 420 });
-  releaseLight(F.left + F.width / 2, F.top + F.height * 0.25);
-  await introWait(FLY + 40);
+  const DROP = 560;
+  const drop = run(titleBox, [{ transform: 'translateY(0)' }, { transform: `translateY(${dropY}px)` }], { duration: DROP, easing: 'cubic-bezier(.52,0,.78,.38)' });
+  run(tbObj, [{ transform: objT(-16, target) }, { transform: objT(-24, target) }], { duration: DROP, easing: 'ease-in' });
+  tbPersp.style.transformOrigin = '50% 100%';
+  run(tbPersp, [{ transform: 'none' }, { transform: 'scale(1.07, .86)', offset: 0.32 }, { transform: 'scale(.98, 1.04)', offset: 0.68 }, { transform: 'none' }],
+    { duration: 340, delay: DROP, easing: 'ease-out' });
+  run(shadow, [{ opacity: 1 }, { opacity: 0.1 }], { duration: DROP * 0.6, easing: 'ease-out' });
+  run(shadow, [{ scale: '.7 .7', opacity: 0.1 }, { scale: '1.32 1.15', opacity: 1, offset: 0.45 }, { scale: '1.08 1', opacity: 1 }],
+    { duration: 480, delay: DROP - 40, easing: 'ease-out' });
+  await drop.finished.then(() => {}, () => {});
+
+  // 4. landed: the lid pops off, tipping its printed top to you, and is gone; light comes up out of the box
+  run(tbLid, [{ transform: lidT(LIFT, 16) }, { transform: lidT(b.h * 2.6, -46, -b.ld * 0.5) }], { duration: 600, easing: 'cubic-bezier(.2,.62,.3,1)' });
+  tbLid.querySelectorAll('.tb-face').forEach(f => run(f, [{ opacity: 1 }, { opacity: 0 }], { duration: 340, delay: 200, easing: 'ease-in' }));
+  const fr = $('.tb-front').getBoundingClientRect();
+  const mouth = { x: fr.left + fr.width / 2, y: fr.top + Math.min(10, fr.height * 0.08), w: fr.width };
+  releaseLight(mouth.x, mouth.y - fr.height * 0.4);
+
+  // 5. the pairs come out, nearest first
+  const pairsOut = burst(mouth);
+  await introWait(pairsOut.launched + 240);
+
+  // 6. the empty box sinks out of view
+  run(titleBox, [{ transform: `translateY(${dropY}px)` }, { transform: `translateY(${dropY + Math.round(vh * 0.62)}px)` }], { duration: 600, easing: 'cubic-bezier(.5,0,.8,.4)' });
+  run(glow, [{ opacity: 1 }, { opacity: 0 }], { duration: 420, easing: 'ease-in' });
+  run(spill, [{ opacity: 1 }, { opacity: 0 }], { duration: 360 });
+  run(shadow, [{ opacity: 1 }, { opacity: 0 }], { duration: 260 });
+  await Promise.all([introWait(620), pairsOut.landed]);
   finishIntro();
 }
 
-// the light the box held starts drifting over the wall from where the lid opened
+// The pairs fly out of the box to their places on the wall. Those on screen travel as cards
+// (photos on the page), each handing over to its tile on the wall as it lands, lit, so the
+// tile can settle into the dark; the rest of the wall is simply there.
+function burst(mouth) {
+  const now = performance.now(), out = [];
+  for (let i = 0; i < L.count; i++) {
+    const r = cellRect(i);
+    if (!introSkip && r.y + r.h > 0 && r.y < innerHeight) out.push({ i, r, d: Math.hypot(r.x + r.w / 2 - mouth.x, r.y + r.h / 2 - mouth.y) + Math.random() * L.tile * 0.9 });
+    else S.landAt[i] = introSkip ? 0 : now - 1000;
+  }
+  out.sort((a, b) => a.d - b.d);                        // nearest first, with a little scatter
+  const gap = out.length ? Math.min(46, 880 / out.length) : 0;
+  invalidate();
+  return { launched: out.length * gap, landed: Promise.all(out.map((c, n) => launchCard(c.i, c.r, mouth, n * gap))) };
+}
+
+function launchCard(i, r, mouth, delay) {
+  const outer = document.createElement('div'), inner = document.createElement('div');
+  outer.className = 'card'; inner.className = 'card-in';
+  inner.style.width = r.w + 'px'; inner.style.height = r.h + 'px';
+  const img = new Image(); img.src = tileURL(photos[cells[i]].key); img.alt = '';
+  inner.append(img); outer.append(inner); cardsEl.append(outer);
+  // out of the box's mouth, small and turning; up and across on an arc to its place
+  const sx = mouth.x + (Math.random() - 0.5) * mouth.w * 0.45 - r.w / 2, sy = mouth.y - r.h / 2;
+  const turn = (Math.random() - 0.5) * 30;
+  const duration = Math.min(1100, 560 + Math.hypot(r.x - sx, r.y - sy) * 0.3);
+  const ax = outer.animate([{ transform: `translateX(${sx}px)` }, { transform: `translateX(${r.x}px)` }],
+    { duration, delay, fill: 'both', easing: 'cubic-bezier(.3,.5,.25,1)' });
+  const ay = inner.animate([
+    { transform: `translateY(${sy}px) scale(.12) rotate(${turn}deg)`, opacity: 0 },
+    { opacity: 1, offset: 0.1 },
+    { transform: `translateY(${r.y}px) scale(1) rotate(0deg)`, opacity: 1 },
+  ], { duration, delay, fill: 'both', easing: 'cubic-bezier(.1,.7,.2,1)' });
+  cardAnims.push(ax, ay);
+  if (introSkip) { ax.finish(); ay.finish(); }
+  return new Promise(res => {
+    ax.onfinish = () => {
+      const t = performance.now();
+      S.landAt[i] = introSkip ? 0 : t;
+      S.flashUntil = Math.max(S.flashUntil, t + 720);
+      invalidate();
+      if (introSkip) outer.remove();
+      else outer.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 180, easing: 'linear' }).onfinish = () => outer.remove();
+      res();
+    };
+    ax.oncancel = () => { outer.remove(); S.landAt[i] = 0; res(); };
+  });
+}
+
+// the light the box held starts drifting over the wall from the box
 function releaseLight(x, y) {
   introDone = true;
   S.lx = S.tx = x; S.ly = S.ty = y - S.stageTop;
@@ -1430,13 +1359,18 @@ function releaseLight(x, y) {
 }
 
 function finishIntro() {
-  introAnims.splice(0).forEach(a => a.cancel());       // the CSS rest pose takes over, identical
-  tbObj.style.transform = ''; tbObj.style.animation = ''; $('.tb-shadow').style.animation = '';
-  html.classList.remove('intro');
+  html.classList.add('unboxed');                        // the box is gone
+  html.classList.remove('intro', 'unboxing');
+  introAnims.splice(0).forEach(a => a.cancel());
+  cardsEl.replaceChildren();
+  tbObj.style.transform = ''; tbObj.style.animation = ''; $('.tb-shadow').style.animation = ''; tbPersp.style.transformOrigin = '';
+  if (!introDone) releaseLight(L.w * 0.5, L.h * 0.45);
   introDone = introLanded = true;
+  for (let i = 0; i < L.count; i++) if (S.landAt[i] === Infinity) S.landAt[i] = 0;   // anything not shown yet is just there
   // skipped: everything shows at once; played: the staggered fades finish first
   if (introSkip) html.classList.remove('revealing');
-  else setTimeout(() => html.classList.remove('revealing'), 1600);
+  else setTimeout(() => html.classList.remove('revealing'), 1400);
+  hintTop();
   invalidate();
 }
 
@@ -1453,6 +1387,7 @@ function start() {
   if (!gl) { buildFallback(); openDeepLink(); playIntro(); return; }
   try { initGL(); } catch (err) { console.warn(err); buildFallback(); openDeepLink(); playIntro(); return; }
   layout(); resize(); readScroll();
+  if (!introDone) S.landAt.fill(Infinity);               // the wall is empty until the pairs come out of the box
   S.lx = S.tx = L.w * 0.5; S.ly = S.ty = L.h * 0.4;
   loadTextures();
   invalidate();
@@ -1462,4 +1397,4 @@ function start() {
   canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); buildFallback(); });
 }
 start();
-window.__sb = { cellRect, cellAt, layerOf, L, S, X, HOLE, get cells() { return cells; }, get introDone() { return introDone; }, get introLanded() { return introLanded; } };
+window.__sb = { cellRect, cellAt, layerOf, L, S, F, HOLE, get cells() { return cells; }, get introDone() { return introDone; }, get introLanded() { return introLanded; } };

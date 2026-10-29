@@ -45,11 +45,15 @@
 
 <main id="top">
   <section class="wall" id="wall" aria-labelledby="wall-title">
+    <h1 class="sr-only" id="wall-title"><span data-i18n="h1a">რეალური წყვილები.</span> <span data-i18n="h1b">რეალური ფოტოები.</span></h1>
     <div class="wall-stage" id="stage"><canvas id="gl" aria-hidden="true"></canvas></div>
     <div class="intro" id="intro">
       <div class="intro-shade" id="intro-shade" aria-hidden="true"></div>
       <i class="intro-stage" aria-hidden="true"></i>
-      <!-- Their own box: the red creased paper and cream wordmark from the logo, the headline printed on its side. -->
+      <!-- the pairs in flight, from the box to their places on the wall -->
+      <div class="cards" id="cards" aria-hidden="true"></div>
+      <!-- Their own box: the red creased paper and cream wordmark from the logo, the headline printed on its
+           side. It is the loader, then it drops, opens, and the pairs come out of it onto the wall. -->
       <div class="title-box" id="title-box">
         <div class="tb-fly" id="tb-fly">
           <div class="tb-shadow" aria-hidden="true"></div>
@@ -71,9 +75,7 @@
                 </div>
               </div>
               <div class="tb-face tb-front">
-                <i class="tb-light" aria-hidden="true"></i>
-                <i class="tb-rim" aria-hidden="true"></i>
-                <h1 id="wall-title"><span data-i18n="h1a">რეალური წყვილები.</span> <span data-i18n="h1b">რეალური ფოტოები.</span></h1>
+                <div class="tb-headline" id="tb-headline" aria-hidden="true"><span>რეალური წყვილები.</span> <span>რეალური ფოტოები.</span></div>
               </div>
               <div class="tb-lid" id="tb-lid" aria-hidden="true">
                 <div class="tb-face lid-under"></div>

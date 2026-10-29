@@ -33,57 +33,35 @@ const DESK = { width: 1916, height: 875, deviceScaleFactor: 1 };
     await done(p);
     await sleep(1800);
     const cls = await p.evaluate(() => document.documentElement.className);
-    ok(`${name}: intro finishes on its own`, !/intro|revealing/.test(cls), `${((Date.now() - t0) / 1000).toFixed(1)} s after the first check, class "${cls}"`);
+    ok(`${name}: intro finishes on its own`, !/\bintro\b|revealing|unboxing/.test(cls), `${((Date.now() - t0) / 1000).toFixed(1)} s after the first check, class "${cls}"`);
     const code = await p.evaluate(() => ({ bars: document.querySelectorAll('#tb-code b').length, lit: document.querySelectorAll('#tb-code b.on').length, tag: document.querySelector('#tag-sizes').textContent }));
     ok(`${name}: the barcode printed every bar, the end label has the sizes`, code.bars > 10 && code.lit === code.bars && /\d+–\d+/.test(code.tag), JSON.stringify(code));
 
-    // the box sits exactly on its three slots
-    const fit = await p.evaluate(() => {
-      const { L, cellRect } = window.__sb;
-      const first = cellRect(L.hole.row * L.cols), last = cellRect(L.hole.row * L.cols + L.hole.cols - 1);
-      const want = { x: first.x, y: first.y, w: last.x + last.w - first.x, h: first.h };
-      const r = document.querySelector('.tb-front').getBoundingClientRect();
-      const d = Math.max(Math.abs(r.left - want.x), Math.abs(r.top - want.y), Math.abs(r.width - want.w), Math.abs(r.height - want.h));
-      return { d: +d.toFixed(2), want: [want.x, want.y, want.w, want.h].map(Math.round), got: [r.left, r.top, r.width, r.height].map(Math.round) };
+    // the box is gone, every pair is on the wall, and the hint sits at the bottom above the filters
+    const end = await p.evaluate(() => {
+      const { L, S } = window.__sb, now = performance.now();
+      let waiting = 0; for (let i = 0; i < L.count; i++) if (!(S.landAt[i] <= now)) waiting++;
+      const h = document.querySelector('#intro-text').getBoundingClientRect(), f = document.querySelector('#filters').getBoundingClientRect();
+      return { box: getComputedStyle(document.querySelector('#title-box')).display, cards: document.querySelectorAll('#cards .card').length, waiting, hintBottom: Math.round(h.bottom), filtersTop: Math.round(f.top), vh: innerHeight };
     });
-    ok(`${name}: box face sits exactly on its three slots`, fit.d < 1.5, JSON.stringify(fit));
+    ok(`${name}: the box has gone and every pair is on the wall`, end.box === 'none' && end.cards === 0 && end.waiting === 0, JSON.stringify(end));
+    ok(`${name}: the hint sits at the bottom, above the filters`, end.hintBottom <= end.filtersTop && end.hintBottom > end.vh * 0.6, JSON.stringify(end));
     await p.screenshot({ path: `${out}/intro-end-${name}.png`, captureBeyondViewport: false });
 
-    // scrolling: the box rides with its slots, then goes back into the wall and photos fill them
-    const centres = () => p.evaluate(() => {
-      const { L, cellRect } = window.__sb;
-      const a = cellRect(L.hole.row * L.cols), z = cellRect(L.hole.row * L.cols + L.hole.cols - 1);
-      const r = document.querySelector('.tb-front').getBoundingClientRect();
-      return { dx: +(r.left + r.width / 2 - (a.x + z.x + z.w) / 2).toFixed(2), dy: +(r.top + r.height / 2 - (a.y + a.h / 2)).toFixed(2) };
-    });
-    const settled = () => p.waitForFunction(() => window.__sb.X.p === window.__sb.X.tp, { timeout: 10000 }).then(() => sleep(250), () => {});
-    await p.evaluate(() => scrollTo(0, 45)); await sleep(300); await settled();
-    const ride = await centres();
-    ok(`${name}: box rides with its slots while the wall scrolls`, Math.abs(ride.dx) < 1 && Math.abs(ride.dy) < 1, JSON.stringify(ride));
-    const R = await p.evaluate(() => Math.max(window.__sb.L.hole.y - window.__sb.L.top, window.__sb.L.h * 0.32));
-    await p.evaluate(R => scrollTo(0, R), R); await sleep(300); await settled();
-    const gone = await p.evaluate(() => {
-      const { L, X, cellAt, cellRect, layerOf } = window.__sb, i = L.hole.row * L.cols + 1, c = cellRect(i);
-      return { p: +X.p.toFixed(3), intro: document.querySelector('#intro').className, cell: cellAt(c.x + c.w / 2, c.y + c.h / 2), layer: layerOf(i) };
-    });
-    ok(`${name}: scrolled on, the box goes back in and photos fill its slots`, gone.p === 1 && /gone/.test(gone.intro) && gone.cell >= 0 && gone.layer >= 0, JSON.stringify(gone));
-    await p.screenshot({ path: `${out}/scrolled-${name}.png`, captureBeyondViewport: false });
+    // scrolling: the hint rides with the wall and fades; back at the top it is there again
+    const settled = () => p.waitForFunction(() => window.__sb.F.p === window.__sb.F.tp, { timeout: 10000 }).then(() => sleep(250), () => {});
+    await p.evaluate(() => scrollTo(0, window.__sb.L.h * 0.45)); await sleep(300); await settled();
+    const gone = await p.evaluate(() => ({ p: window.__sb.F.p, intro: document.querySelector('#intro').className }));
+    ok(`${name}: scrolled on, the hint has gone`, gone.p === 1 && /gone/.test(gone.intro), JSON.stringify(gone));
     await p.evaluate(() => scrollTo(0, 0)); await sleep(300); await settled();
-    const back = await p.evaluate(() => {
-      const { L, X, cellRect } = window.__sb;
-      const first = cellRect(L.hole.row * L.cols), last = cellRect(L.hole.row * L.cols + L.hole.cols - 1);
-      const r = document.querySelector('.tb-front').getBoundingClientRect();
-      const d = Math.max(Math.abs(r.left - first.x), Math.abs(r.top - first.y), Math.abs(r.width - (last.x + last.w - first.x)), Math.abs(r.height - first.h));
-      return { p: X.p, d: +d.toFixed(2), op: getComputedStyle(document.querySelector('.tb-persp')).opacity };
-    });
-    ok(`${name}: back at the top, the box is flush in its slots again`, back.p === 0 && back.d < 1.5 && back.op === '1', JSON.stringify(back));
+    const back = await p.evaluate(() => ({ p: window.__sb.F.p, op: getComputedStyle(document.querySelector('#intro-text')).opacity }));
+    ok(`${name}: back at the top, the hint is back`, back.p === 0 && back.op === '1', JSON.stringify(back));
 
-    // tapping the box: it opens, and a random pair comes out into the window
-    const c = await p.evaluate(() => { const r = document.querySelector('.tb-front').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+    // a tile opens its pair once the wall is complete
+    const c = await p.evaluate(() => { const r = window.__sb.cellRect(window.__sb.L.cols + 1); return { x: r.x + r.w / 2, y: r.y + r.h / 2 }; });
     if (name === 'phone') await p.touchscreen.tap(c.x, c.y); else await p.mouse.click(c.x, c.y);
     await p.waitForFunction(() => document.querySelector('#sheet').classList.contains('open'), { timeout: 8000 }).catch(() => {});
-    const fromBox = await p.evaluate(() => ({ open: document.querySelector('#sheet').classList.contains('open'), hash: location.hash }));
-    ok(`${name}: tapping the box opens a pair out of it`, fromBox.open && fromBox.hash.length > 1, JSON.stringify(fromBox));
+    ok(`${name}: a tile opens its pair`, await p.evaluate(() => document.querySelector('#sheet').classList.contains('open')));
     await p.close();
 
     // a key skips it
@@ -107,7 +85,7 @@ const DESK = { width: 1916, height: 875, deviceScaleFactor: 1 };
   await sleep(700);
   ok('reduced-motion setting: the loader counts', /^\d+ \/ \d+$/.test(await p.evaluate(() => document.querySelector('#tb-count').textContent)));
   await done(p);
-  ok('reduced-motion setting: box lands in its slots', await p.evaluate(() => document.documentElement.classList.contains('laid')));
+  ok('reduced-motion setting: the intro plays through to the wall', await p.evaluate(() => window.__sb.introLanded && getComputedStyle(document.querySelector('#title-box')).display === 'none'));
   await p.close();
 
   // no dark dead end: size 37 disables Lacoste; Lacoste disables the sizes it doesn't have

@@ -4,11 +4,9 @@ Spec demo for [Sneakerbox](https://www.facebook.com/sneakerboxonlineshop). Live 
 
 The shop's own on-foot photos form a dark wall. Light follows the finger (or cursor) and shows the colour; tap a pair for its price, the sizes in stock and an order that opens in their Messenger with the text already written. Pick a size and only the pairs in stock in that size light up. Georgian first, with an English toggle.
 
-The headline is printed on the shop's own box (the red creased paper and cream wordmark from their logo), which takes three slots of the wall. Georgian is printed on the front and English on the back; the language button turns the box over.
+The intro is the shop's own box (the red creased paper and cream wordmark from their logo), with the headline printed on it: Georgian on the front, English on the back.
 
-On every open the box drops onto a lit stage and turns while the photos load. You catch its end label as it turns (Sneakerbox, Tbilisi, EU sizes, pair count). Under it a barcode prints one bar per photo, with a rolling count. When the code is complete a scanner line reads it, the lid lifts with light inside, and the box flies into its slots. The wall then builds out from the box in a wave of light. A tap or a key skips the intro; shared pair links go straight to the pair.
-
-The box is a button too: with a mouse its lid lifts a crack and light leaks out, and left alone it breathes now and then. Tap it and the lid pops open: a random pair comes out into the window (in the size picked, if any) and goes back into the box when the window closes. Scroll down and the box goes back into the wall while three more pairs fill its slots; scroll back up and it comes out again.
+On every open the box drops onto a lit stage and turns while the photos load. You catch its end label as it turns (Sneakerbox, Tbilisi, EU sizes, pair count). Under it a barcode prints one bar per photo, with a rolling count. When the code is complete a scanner line reads it, the box slows to face you and the lid lifts with light inside. Then the box drops to the bottom of the screen and the lid pops off. The pairs fly out of it to their places on the wall, nearest first, each landing lit and settling into the dark, and the empty box sinks out of view. A tap or a key skips the intro; shared pair links go straight to the pair. The hint sits at the bottom of the wall and fades as you scroll.
 
 With a mouse, the tile under the pointer lifts a little off the wall and settles back on the same spring when the pointer moves on. Picking a size or brand sends the light across the wall as a wave from the chip, and the name and price label glides from tile to tile.
 
@@ -36,7 +34,7 @@ tools/
   process_images.py  grades the photos and writes assets/ + catalog.json
   build.py           writes dist/
   og.js              renders the 1200×630 share image from the live wall
-  qa.js, qa-size.js, qa-intro.js  headless checks (touch, history, fallback, size filter, intro, box on its slots and on scroll)
+  qa.js, qa-size.js, qa-intro.js  headless checks (touch, history, fallback, size filter, the intro, the hint on scroll, window details)
   intro-frames.js    records the intro frame by frame
   scroll-frames.js   records a phone scroll (finger drags) frame by frame
   window-frames.js   captures the pair window opening, then a related pair

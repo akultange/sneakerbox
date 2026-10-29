@@ -93,9 +93,8 @@ html.no-gl .wall canvas { display: none; }
 
 html { scrollbar-gutter: stable; }   /* the intro hides the scrollbar; keep the layout from jumping when it returns */
 
-/* the first screen over the wall: the box on its three slots and the text under it.
-   Both are placed on the wall's own grid and moved by the script in the same frame the
-   wall is drawn, so the box never slips against its slots while the page scrolls. */
+/* the first screen over the wall: the hint at the bottom (moved by the script in the same
+   frame the wall is drawn, and faded as it scrolls), and the box while the intro plays */
 .intro {
   position: fixed; left: 0; right: 0; top: 0; z-index: 5;
   height: 100vh; height: 100svh;
@@ -103,18 +102,20 @@ html { scrollbar-gutter: stable; }   /* the intro hides the scrollbar; keep the 
   overflow: hidden;                  /* the lid's glow must not widen the page on phones */
 }
 html.laid .intro, html.intro .title-box { visibility: visible; }
-html.laid .intro.gone { visibility: hidden; }          /* scrolled on: the box is back in the wall */
+html.laid .intro.gone { visibility: hidden; }          /* scrolled on: the hint has gone */
 .intro-shade {                       /* keeps the hint readable; fades as the wall scrolls */
   position: absolute; inset: 0;
   background: linear-gradient(to bottom, rgba(28, 27, 25, 0) 50%, rgba(28, 27, 25, .7) 78%, rgba(28, 27, 25, .9));
 }
-.intro-text { position: absolute; left: var(--pad); right: var(--pad); will-change: transform, opacity; }
+.intro-text { position: absolute; left: var(--pad); right: var(--pad); bottom: calc(80px + env(safe-area-inset-bottom)); will-change: transform, opacity; }
 
 /* ---- the title box ---------------------------------------------------------
    Their box, built in CSS 3D: the creased red paper and the cream wordmark are
    cut from the shop's own logo, and the headline is printed on its long side.
-   It fills exactly three slots of the wall. The sizes below repeat the wall's
-   grid in CSS, so the box draws at its right size before any script runs. */
+   It is three tiles wide and one high; the sizes below repeat the wall's grid in
+   CSS, so it draws at its right size before any script runs. It only exists for
+   the intro: it turns in the middle while the photos load, then drops, opens and
+   the pairs come out of it. */
 .title-box {
   --bw: calc(100vw - 16px);                                /* 3 columns: the whole row */
   --bh: calc((100vw - 28px) / 3);                          /* one tile high */
@@ -123,17 +124,18 @@ html.laid .intro.gone { visibility: hidden; }          /* scrolled on: the box i
   --lo: 3px;                                               /* lid overhang */
   --tpad: calc(var(--bh) * .17);
   --ls: .78;                                               /* loader scale */
-  position: absolute; left: var(--tbx, var(--pad)); top: var(--tby, 0px);
+  position: fixed; z-index: 70; display: none;
+  left: calc(50% - var(--bw) / 2); top: calc(44% - var(--bh) / 2);
   width: var(--bw); height: var(--bh);
   will-change: transform;
 }
-html.no-gl .intro { position: relative; height: auto; padding: 92px var(--pad) 24px; visibility: visible; }
-html.no-gl .title-box { position: relative; left: 0; top: 0; }
-html.no-gl .intro-text { position: relative; left: 0; right: 0; margin-top: 22px; }
+html.intro .title-box, html.unboxing .title-box { display: block; }
+html.no-gl .intro { position: relative; height: auto; padding: 84px var(--pad) 20px; visibility: visible; }
+html.no-gl .intro-text { position: relative; left: 0; right: 0; bottom: auto; }
 @media (min-width: 520px) { .title-box { --bw: calc((100vw - 78px) * .75 + 20px); --bh: calc((100vw - 78px) / 4); } }
 @media (min-width: 900px) { .title-box { --bw: calc((100vw - 98px) / 2 + 20px); --bh: calc((100vw - 98px) / 6); --ls: .62; } }
 @media (min-width: 1340px) { .title-box { --bw: calc((100vw - 108px) * 3 / 7 + 20px); --bh: calc((100vw - 108px) / 7); } }
-.tb-fly { position: absolute; inset: 0; transform-origin: 0 0; }
+.tb-fly { position: absolute; inset: 0; transform-origin: 50% 50%; transform: scale(var(--ls)); }
 .tb-persp { position: absolute; inset: 0; perspective: 1500px; perspective-origin: 50% 35%; will-change: transform, opacity; }
 .tb-obj {
   position: absolute; left: 50%; top: 50%; width: 0; height: 0;
@@ -165,21 +167,8 @@ html.no-gl .intro-text { position: relative; left: 0; right: 0; margin-top: 22px
   --lw: calc(var(--bw) + 2 * var(--lo)); --ld: calc(var(--bd) + 2 * var(--lo));
   position: absolute; left: 0; top: 0; width: 0; height: 0;
   transform-style: preserve-3d;
-  /* hinged at its back edge, so a peek lifts the front a crack */
-  transform: translateY(calc(var(--bh) / -2)) translateZ(calc(var(--ld) / -2)) rotateX(0deg) translateZ(calc(var(--ld) / 2));
-  transition: transform .6s cubic-bezier(.2, .8, .2, 1);
+  transform: translateY(calc(var(--bh) / -2));
 }
-.title-box.peek .tb-lid { transform: translateY(calc(var(--bh) / -2)) translateZ(calc(var(--ld) / -2)) rotateX(12deg) translateZ(calc(var(--ld) / 2)); }
-/* light leaking out of the gap */
-.tb-rim {
-  position: absolute; z-index: 3; left: 2%; right: 2%; top: 0; height: 2px; border-radius: 1px; opacity: 0; pointer-events: none;
-  background: rgba(255, 240, 205, .95);
-  box-shadow: 0 0 6px 1px rgba(255, 226, 170, .7), 0 -8px 22px 6px rgba(255, 220, 160, .28);
-  transition: opacity .45s ease;
-}
-.title-box.peek .tb-rim { opacity: 1; transition-delay: .08s; }
-.tb-spill { transition: opacity .5s ease; }
-.title-box.peek .tb-spill { opacity: .5; }
 .lid-top { --fw: var(--lw); --fh: var(--ld); transform: rotateX(90deg) translateZ(var(--lo)); background-position: -120px -60px; --shade: linear-gradient(rgba(255, 255, 255, .1), rgba(255, 255, 255, .02)); }
 .lid-under { --fw: var(--lw); --fh: var(--ld); transform: rotateX(-90deg) translateZ(calc(var(--lo) * -1 + 1px)); background: #3b0d0d; --shade: linear-gradient(rgba(0, 0, 0, .35), rgba(0, 0, 0, .1)); }
 .lid-front, .lid-back { --fw: var(--lw); --fh: var(--lh); }
@@ -203,7 +192,7 @@ html.no-gl .intro-text { position: relative; left: 0; right: 0; margin-top: 22px
 .lid-left { transform: translateY(calc(var(--lh) / 2 - var(--lo))) rotateY(-90deg) translateZ(calc(var(--lw) / 2)); --shade: rgba(0, 0, 0, .4); }
 
 /* the headline, printed on the box in the logo's cream (the other language on the back) */
-.tb-front h1, .tb-alt {
+.tb-headline, .tb-alt {
   position: absolute; z-index: 2; left: var(--tpad); right: var(--tpad); top: var(--lh); bottom: 0;
   margin: 0; display: flex; flex-direction: column; justify-content: center;
   font: 900 min(calc((var(--bw) - 2 * var(--tpad)) * .1045), calc((var(--bh) - var(--lh)) * .4))/.95 var(--ka);
@@ -211,15 +200,10 @@ html.no-gl .intro-text { position: relative; left: 0; right: 0; margin-top: 22px
   color: var(--cream);
   text-shadow: 0 1px 1px rgba(60, 0, 0, .35);
 }
-.tb-front h1 span, .tb-alt span { display: block; white-space: nowrap; }
-.tb-front h1.en, .tb-alt.en {
+.tb-headline span, .tb-alt span { display: block; white-space: nowrap; }
+.tb-headline.en, .tb-alt.en {
   font-family: var(--sans); font-weight: 800; letter-spacing: -.03em;
   font-size: min(calc((var(--bw) - 2 * var(--tpad)) * .17), calc((var(--bh) - var(--lh)) * .4));
-}
-/* the wall's light falls on the box too */
-.tb-light {
-  position: absolute; inset: 0; z-index: 1; pointer-events: none; mix-blend-mode: screen;
-  background: radial-gradient(circle at var(--lx, -999px) var(--ly, -999px), rgba(255, 232, 190, var(--lk, 0)), rgba(255, 232, 190, 0) calc(var(--bw) * .6));
 }
 .tb-shadow { position: absolute; left: 4%; right: 4%; top: 78%; height: 50%; pointer-events: none; opacity: 0; background: radial-gradient(closest-side, rgba(0, 0, 0, .66), rgba(0, 0, 0, 0)); }
 html.intro .tb-shadow { opacity: 1; animation: tb-shadow-in .9s both, tb-shadow-spin 2.8s linear infinite; }
@@ -264,9 +248,7 @@ html.intro .tb-shadow { opacity: 1; animation: tb-shadow-in .9s both, tb-shadow-
 #tb-of { white-space: pre; }
 
 /* intro: the box spins in the middle while the photos arrive; everything else waits */
-html.intro, html.intro body { overflow: hidden; }
-html.intro .title-box { position: fixed; z-index: 70; margin: 0; left: calc(50% - var(--bw) / 2); top: calc(44% - var(--bh) / 2); }
-html.intro .tb-fly { transform-origin: 50% 50%; transform: scale(var(--ls)); }
+html.intro, html.intro body, html.unboxing, html.unboxing body { overflow: hidden; }
 html.intro .tb-obj { animation: tb-spin 2.8s linear infinite; }
 html.intro .tb-persp { animation: tb-drop .9s both; }
 /* the box drops onto a lit stage, spinning, with one small bounce */
@@ -294,18 +276,29 @@ html.intro .tb-persp { animation: tb-drop .9s both; }
 }
 html.intro .intro-stage { visibility: visible; opacity: 1; }
 html.revealing .intro-stage { transition: opacity 600ms linear; }
+
+/* the pairs in flight: photos on the page, handing over to their tiles as they land */
+.cards { position: absolute; inset: 0; pointer-events: none; }
+.card { position: absolute; left: 0; top: 0; will-change: transform; }
+.card-in {
+  transform-origin: 50% 50%; will-change: transform, opacity;
+  border-radius: 5px; overflow: hidden; background: var(--concrete);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .45);
+}
+.card-in img { width: 100%; height: 100%; object-fit: cover; }
 html.intro .tb-load { opacity: 1; }
 html.intro .wall-stage, html.intro .top, html.intro .intro-text, html.intro .intro-shade, html.intro .fallback { opacity: 0; }
 html.intro .filters { opacity: 0; transform: translateY(100%); }
 @keyframes tb-spin { from { transform: translateZ(calc(var(--bd) / -2)) rotateX(-20deg) rotateY(0deg); } to { transform: translateZ(calc(var(--bd) / -2)) rotateX(-20deg) rotateY(360deg); } }
 html.intro .tile-label { opacity: 0 !important; }
-/* the reveal, while the box flies into place */
-html.revealing .wall-stage { transition: opacity 400ms linear; }   /* the tiles themselves arrive with the landing wave */
-html.revealing .intro-shade { transition: opacity 800ms linear 300ms; }
-html.revealing .top { transition: opacity 500ms linear 700ms; }
-html.revealing .intro-text { transition: opacity 500ms linear 860ms; }
+/* the reveal, from the moment the box drops: the wall comes in empty (the pairs arrive from
+   the box), the header as they fly, the hint and the filters as the empty box sinks */
+html.revealing .wall-stage { transition: opacity 300ms linear; }
+html.revealing .intro-shade { transition: opacity 900ms linear 1300ms; }
+html.revealing .top { transition: opacity 600ms linear 900ms; }
+html.revealing .intro-text { transition: opacity 600ms linear 1900ms; }
 html.revealing .tb-load { opacity: 0; transition: none; }
-html.revealing .filters { transition: transform 600ms var(--ease-out) 860ms, opacity 400ms linear 860ms; }
+html.revealing .filters { transition: transform 600ms var(--ease-out) 1900ms, opacity 400ms linear 1900ms; }
 .intro p {
   margin: 0; max-width: 34ch;
   font-size: 16px; line-height: 1.55; color: var(--paper);
@@ -514,6 +507,7 @@ html.no-gl .fallback button:hover img, html.no-gl .fallback button:focus-visible
 
 @media (min-width: 760px) {
   :root { --pad: 28px; }
+  .intro-text { bottom: 100px; }
   .brand img { width: 156px; }
   .intro p { font-size: 17px; max-width: 52ch; }
   .how { padding-top: 96px; }

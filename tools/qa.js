@@ -47,8 +47,8 @@ const ok = (name, pass, info = '') => results.push(`${pass ? 'PASS' : 'FAIL'}  $
   await until(p, () => /Real pairs/.test(document.querySelector('#wall-title').innerText)); await sleep(300);   // the box turns over first
   const en = await p.evaluate(() => ({ lang: document.documentElement.lang, h1: document.querySelector('#wall-title').innerText.replace(/\n/g, ' | '), btn: document.querySelector('#lang').textContent, count: document.querySelector('#count').textContent, h1w: document.querySelector('#wall-title').scrollWidth, vw: innerWidth }));
   ok('lang toggle to English', en.lang === 'en' && /Real pairs/.test(en.h1), JSON.stringify(en));
-  const back = await p.evaluate(() => ({ alt: document.querySelector('#tb-alt').innerText.replace(/\n/g, ' | '), tf: document.querySelector('#tb-obj').getAnimations().length }));
-  ok('the box turned over: English in front, Georgian on the back, at rest', /რეალური/.test(back.alt) && back.tf === 0, JSON.stringify(back));
+  const box = await p.evaluate(() => ({ front: document.querySelector('#tb-headline').textContent, back: document.querySelector('#tb-alt').textContent }));
+  ok('the box is printed in English on the front, Georgian on the back', /Real pairs/.test(box.front) && /რეალური/.test(box.back), JSON.stringify(box));
   await p.screenshot({ path: `${out}/en-phone.png`, captureBeyondViewport: false });
   await p.reload({ waitUntil: 'networkidle0' }); await p.keyboard.press('Shift');
   await p.waitForFunction(() => window.__sb && window.__sb.introDone, { timeout: 15000 }); await sleep(600);
@@ -113,10 +113,11 @@ const ok = (name, pass, info = '') => results.push(`${pass ? 'PASS' : 'FAIL'}  $
   // 6. Narrow phone 360
   p = await b.newPage();
   await p.setViewport({ width: 360, height: 740, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
-  await p.goto(url, { waitUntil: 'networkidle0' }); await p.keyboard.press('Shift');
-  await p.waitForFunction(() => window.__sb && window.__sb.introDone, { timeout: 15000 }); await sleep(800);
-  const fit = await p.evaluate(() => [...document.querySelectorAll('#wall-title span')].map(s => Math.round(s.getBoundingClientRect().right)));
-  ok('360px phone: headline fits', fit.every(r => r <= 360 - 8), JSON.stringify(fit));
+  await p.goto(url, { waitUntil: 'domcontentloaded' }); await sleep(900);       // the loader: the headline printed on the box
+  const fit = await p.evaluate(() => { const f = document.querySelector('.tb-front').getBoundingClientRect(); return { face: Math.round(f.right), lines: [...document.querySelectorAll('#tb-headline span')].map(s => Math.round(s.getBoundingClientRect().right)) }; });
+  ok('360px phone: the headline fits on the box', fit.lines.every(r => r <= fit.face), JSON.stringify(fit));
+  await p.keyboard.press('Shift');
+  await p.waitForFunction(() => window.__sb && window.__sb.introLanded, { timeout: 15000 }); await sleep(800);
   await p.screenshot({ path: `${out}/phone-360.png`, captureBeyondViewport: false });
   await p.close();
 
