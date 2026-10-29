@@ -48,6 +48,7 @@
     <div class="wall-stage" id="stage"><canvas id="gl" aria-hidden="true"></canvas></div>
     <div class="intro" id="intro">
       <div class="intro-shade" id="intro-shade" aria-hidden="true"></div>
+      <i class="intro-stage" aria-hidden="true"></i>
       <!-- Their own box: the red creased paper and cream wordmark from the logo, the headline printed on its side. -->
       <div class="title-box" id="title-box">
         <div class="tb-fly" id="tb-fly">
@@ -55,18 +56,29 @@
           <div class="tb-persp">
             <div class="tb-obj" id="tb-obj">
               <div class="tb-face tb-bottom" aria-hidden="true"></div>
-              <div class="tb-face tb-back" aria-hidden="true"></div>
+              <!-- the back carries the other language: ENG / ქარ turns the box over -->
+              <div class="tb-face tb-back" aria-hidden="true"><div class="tb-alt" id="tb-alt"><span></span> <span></span></div></div>
               <div class="tb-face tb-left" aria-hidden="true"></div>
               <div class="tb-face tb-inside" aria-hidden="true"><i class="tb-glow"></i></div>
-              <div class="tb-face tb-right" aria-hidden="true"></div>
+              <div class="tb-face tb-right" aria-hidden="true">
+                <!-- the end label every shoebox has, caught as the box turns -->
+                <div class="tb-tag">
+                  <b>SNEAKERBOX</b>
+                  <span>TBILISI, GEORGIA</span>
+                  <span class="tag-row"><em>EU</em><strong id="tag-sizes"></strong></span>
+                  <span class="tag-row"><em>PAIRS</em><strong id="tag-pairs"></strong></span>
+                  <i class="tag-code"></i>
+                </div>
+              </div>
               <div class="tb-face tb-front">
                 <i class="tb-light" aria-hidden="true"></i>
+                <i class="tb-rim" aria-hidden="true"></i>
                 <h1 id="wall-title"><span data-i18n="h1a">რეალური წყვილები.</span> <span data-i18n="h1b">რეალური ფოტოები.</span></h1>
               </div>
               <div class="tb-lid" id="tb-lid" aria-hidden="true">
                 <div class="tb-face lid-under"></div>
                 <div class="tb-face lid-top"></div>
-                <div class="tb-face lid-back"></div>
+                <div class="tb-face lid-back"><img src="assets/img/brand/wordmark.webp" width="757" height="106" alt=""></div>
                 <div class="tb-face lid-left"></div>
                 <div class="tb-face lid-right"></div>
                 <div class="tb-face lid-front"><img src="assets/img/brand/wordmark.webp" width="757" height="106" alt=""></div>
@@ -75,7 +87,11 @@
           </div>
           <i class="tb-spill" aria-hidden="true"></i>
         </div>
-        <div class="tb-load" aria-hidden="true"><i><b id="tb-bar"></b></i><span id="tb-count"></span></div>
+        <!-- the loader: a barcode that prints one bar per photo, then gets scanned -->
+        <div class="tb-load" id="tb-load" aria-hidden="true">
+          <div class="tb-code" id="tb-code"><i class="tb-scan" id="tb-scan"></i></div>
+          <span class="tb-count" id="tb-count"><span class="tb-roll" id="tb-roll"></span><span id="tb-of"></span></span>
+        </div>
       </div>
       <div class="intro-text" id="intro-text">
         <p id="hint" data-i18n="hint">თითი გადაატარე კედელს და სინათლე ფერს გაჩვენებს. შეეხე წყვილს, რომ ნახო ზომები და ფასი.</p>
@@ -132,6 +148,9 @@
         <span class="gallery-count" id="gallery-count"></span>
       </div>
       <div class="details">
+        <button class="share" id="sheet-share" type="button" aria-label="გაზიარება" data-i18n-label="share">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3.5M7.5 8 12 3.5 16.5 8M5.5 12.5v6a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
         <div class="maker" id="sheet-maker"></div>
         <h2 id="sheet-title"></h2>
         <p class="colorway" id="sheet-color"></p>

@@ -43,10 +43,13 @@ const ok = (name, pass, info = '') => results.push(`${pass ? 'PASS' : 'FAIL'}  $
 
   // 1. English toggle on phone
   let p = await page();
-  await p.click('#lang'); await sleep(300);
+  await p.click('#lang');
+  await until(p, () => /Real pairs/.test(document.querySelector('#wall-title').innerText)); await sleep(300);   // the box turns over first
   const en = await p.evaluate(() => ({ lang: document.documentElement.lang, h1: document.querySelector('#wall-title').innerText.replace(/\n/g, ' | '), btn: document.querySelector('#lang').textContent, count: document.querySelector('#count').textContent, h1w: document.querySelector('#wall-title').scrollWidth, vw: innerWidth }));
   ok('lang toggle to English', en.lang === 'en' && /Real pairs/.test(en.h1), JSON.stringify(en));
-  await p.screenshot({ path: `${out}/en-phone.png` });
+  const back = await p.evaluate(() => ({ alt: document.querySelector('#tb-alt').innerText.replace(/\n/g, ' | '), tf: document.querySelector('#tb-obj').getAnimations().length }));
+  ok('the box turned over: English in front, Georgian on the back, at rest', /რეალური/.test(back.alt) && back.tf === 0, JSON.stringify(back));
+  await p.screenshot({ path: `${out}/en-phone.png`, captureBeyondViewport: false });
   await p.reload({ waitUntil: 'networkidle0' }); await p.keyboard.press('Shift');
   await p.waitForFunction(() => window.__sb && window.__sb.introDone, { timeout: 15000 }); await sleep(600);
   ok('language remembered after reload', await p.evaluate(() => document.documentElement.lang === 'en'));
@@ -72,7 +75,7 @@ const ok = (name, pass, info = '') => results.push(`${pass ? 'PASS' : 'FAIL'}  $
   const t = await p.evaluate(() => document.querySelector('#sheet-title').textContent);
   ok('deep link #palermo opens Palermo', (await sheetOpen(p)) && t === 'Palermo', t);
   await sleep(500);
-  await p.screenshot({ path: `${out}/desktop-sheet.png` });
+  await p.screenshot({ path: `${out}/desktop-sheet.png`, captureBeyondViewport: false });
   await p.keyboard.press('Escape'); await closed(p);
   ok('Escape closes sheet', !(await sheetOpen(p)));
   // focus trap: Tab cycles inside the sheet
@@ -85,14 +88,14 @@ const ok = (name, pass, info = '') => results.push(`${pass ? 'PASS' : 'FAIL'}  $
   ok('deep link then another pair: closing stays closed', !after.open && after.hash === '', JSON.stringify(after));
   // below the wall
   await p.evaluate(() => scrollTo(0, document.body.scrollHeight)); await sleep(500);
-  await p.screenshot({ path: `${out}/desktop-bottom.png` });
+  await p.screenshot({ path: `${out}/desktop-bottom.png`, captureBeyondViewport: false });
   await p.close();
 
   // 4. No WebGL fallback
   p = await page({ noGL: true });
   const fb = await p.evaluate(() => ({ cls: document.documentElement.className, n: document.querySelectorAll('#fallback button').length }));
   ok('no-WebGL fallback grid', /no-gl/.test(fb.cls) && fb.n > 0, JSON.stringify(fb));
-  await p.screenshot({ path: `${out}/nogl-phone.png` });
+  await p.screenshot({ path: `${out}/nogl-phone.png`, captureBeyondViewport: false });
   await p.evaluate(() => document.querySelector('#fallback button').click()); await opened(p);
   ok('fallback tile opens sheet', await sheetOpen(p));
   await p.close();
@@ -104,7 +107,7 @@ const ok = (name, pass, info = '') => results.push(`${pass ? 'PASS' : 'FAIL'}  $
   await sleep(1500);
   const L2 = await p.evaluate(() => ({ k: +window.__sb.S.k.toFixed(2), x: window.__sb.S.lx, y: window.__sb.S.ly }));
   ok('reduced-motion setting: same light drift', L1.k > 0.5 && Math.abs(L1.x - L2.x) + Math.abs(L1.y - L2.y) > 2, JSON.stringify([L1, L2]));
-  await p.screenshot({ path: `${out}/reduced-phone.png` });
+  await p.screenshot({ path: `${out}/reduced-phone.png`, captureBeyondViewport: false });
   await p.close();
 
   // 6. Narrow phone 360
@@ -114,7 +117,24 @@ const ok = (name, pass, info = '') => results.push(`${pass ? 'PASS' : 'FAIL'}  $
   await p.waitForFunction(() => window.__sb && window.__sb.introDone, { timeout: 15000 }); await sleep(800);
   const fit = await p.evaluate(() => [...document.querySelectorAll('#wall-title span')].map(s => Math.round(s.getBoundingClientRect().right)));
   ok('360px phone: headline fits', fit.every(r => r <= 360 - 8), JSON.stringify(fit));
-  await p.screenshot({ path: `${out}/phone-360.png` });
+  await p.screenshot({ path: `${out}/phone-360.png`, captureBeyondViewport: false });
+  await p.close();
+
+  // 8. Pair window details: the order button lights up, share hands over the pair's link, the lens zooms
+  p = await b.newPage();
+  p.on('pageerror', e => errors.push(e.message));
+  // headless Chromium reports no hover; a desktop with a mouse does
+  await p.evaluateOnNewDocument(() => { const mm = window.matchMedia.bind(window); window.matchMedia = q => /hover: hover/.test(q) ? mm('(min-width: 1px)') : mm(q); });
+  await p.setViewport({ width: 1440, height: 900 });
+  await p.goto(url + '#palermo', { waitUntil: 'networkidle0' }); await opened(p); await sleep(1500);
+  await p.evaluate(() => [...document.querySelectorAll('#sizes .size')].find(x => !x.disabled).click()); await sleep(150);
+  ok('picking a size lights the order button', await p.evaluate(() => document.querySelector('#order').classList.contains('ignite') && document.querySelector('#order').getAttribute('aria-disabled') === 'false'));
+  await p.click('#sheet-share'); await sleep(600);
+  const shared = await p.evaluate(() => document.querySelector('#toast').textContent);
+  ok('share hands over the pair link', /palermo|copied|დაკოპირდა/i.test(shared), shared);
+  const ph = await p.evaluate(() => { const r = document.querySelector('#gallery picture').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+  await p.mouse.move(ph.x - 40, ph.y - 40); await p.mouse.move(ph.x, ph.y, { steps: 3 }); await sleep(800);
+  ok('the lens zooms the photo under the mouse', await p.evaluate(() => !!document.querySelector('#gallery picture.zoom')));
   await p.close();
 
   // 7. Mouse lift: the tile under the pointer lifts and settles back; a finger never lifts one
@@ -125,7 +145,7 @@ const ok = (name, pass, info = '') => results.push(`${pass ? 'PASS' : 'FAIL'}  $
   await p.mouse.move(a.x - 30, a.y - 30); await p.mouse.move(a.x, a.y, { steps: 4 });
   await until(p, i => window.__sb.S.lift[i] === 1, A);
   ok('mouse: the tile under the pointer lifts', await p.evaluate(i => window.__sb.S.lift[i], A) === 1);
-  await p.screenshot({ path: `${out}/lift-desktop.png` });
+  await p.screenshot({ path: `${out}/lift-desktop.png`, captureBeyondViewport: false });
   await p.mouse.move(bb.x, bb.y, { steps: 4 });
   await until(p, (i, j) => window.__sb.S.lift[i] === 0 && window.__sb.S.lift[j] === 1, A, B);
   const ab = await p.evaluate((i, j) => [window.__sb.S.lift[i], window.__sb.S.lift[j]], A, B);

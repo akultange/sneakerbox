@@ -27,13 +27,15 @@ const DESK = { width: 1916, height: 875, deviceScaleFactor: 1 };
     const startCls = await p.evaluate(() => document.documentElement.className);
     ok(`${name}: intro starts on load`, /intro/.test(startCls), startCls);
     await sleep(700);
-    const count = await p.evaluate(() => document.querySelector('#tb-count').textContent);
+    const count = await p.evaluate(() => document.querySelector('#tb-count').dataset.n || '');
     ok(`${name}: loader shows a photo count`, /^\d+ \/ \d+$/.test(count), count);
     const t0 = Date.now();
     await done(p);
     await sleep(1800);
     const cls = await p.evaluate(() => document.documentElement.className);
     ok(`${name}: intro finishes on its own`, !/intro|revealing/.test(cls), `${((Date.now() - t0) / 1000).toFixed(1)} s after the first check, class "${cls}"`);
+    const code = await p.evaluate(() => ({ bars: document.querySelectorAll('#tb-code b').length, lit: document.querySelectorAll('#tb-code b.on').length, tag: document.querySelector('#tag-sizes').textContent }));
+    ok(`${name}: the barcode printed every bar, the end label has the sizes`, code.bars > 10 && code.lit === code.bars && /\d+–\d+/.test(code.tag), JSON.stringify(code));
 
     // the box sits exactly on its three slots
     const fit = await p.evaluate(() => {
@@ -45,7 +47,7 @@ const DESK = { width: 1916, height: 875, deviceScaleFactor: 1 };
       return { d: +d.toFixed(2), want: [want.x, want.y, want.w, want.h].map(Math.round), got: [r.left, r.top, r.width, r.height].map(Math.round) };
     });
     ok(`${name}: box face sits exactly on its three slots`, fit.d < 1.5, JSON.stringify(fit));
-    await p.screenshot({ path: `${out}/intro-end-${name}.png` });
+    await p.screenshot({ path: `${out}/intro-end-${name}.png`, captureBeyondViewport: false });
 
     // scrolling: the box rides with its slots, then goes back into the wall and photos fill them
     const centres = () => p.evaluate(() => {
@@ -65,7 +67,7 @@ const DESK = { width: 1916, height: 875, deviceScaleFactor: 1 };
       return { p: +X.p.toFixed(3), intro: document.querySelector('#intro').className, cell: cellAt(c.x + c.w / 2, c.y + c.h / 2), layer: layerOf(i) };
     });
     ok(`${name}: scrolled on, the box goes back in and photos fill its slots`, gone.p === 1 && /gone/.test(gone.intro) && gone.cell >= 0 && gone.layer >= 0, JSON.stringify(gone));
-    await p.screenshot({ path: `${out}/scrolled-${name}.png` });
+    await p.screenshot({ path: `${out}/scrolled-${name}.png`, captureBeyondViewport: false });
     await p.evaluate(() => scrollTo(0, 0)); await sleep(300); await settled();
     const back = await p.evaluate(() => {
       const { L, X, cellRect } = window.__sb;
@@ -76,11 +78,12 @@ const DESK = { width: 1916, height: 875, deviceScaleFactor: 1 };
     });
     ok(`${name}: back at the top, the box is flush in its slots again`, back.p === 0 && back.d < 1.5 && back.op === '1', JSON.stringify(back));
 
-    // tapping the box opens nothing
+    // tapping the box: it opens, and a random pair comes out into the window
     const c = await p.evaluate(() => { const r = document.querySelector('.tb-front').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
     if (name === 'phone') await p.touchscreen.tap(c.x, c.y); else await p.mouse.click(c.x, c.y);
-    await sleep(600);
-    ok(`${name}: tapping the box opens nothing`, !(await p.evaluate(() => document.querySelector('#sheet').classList.contains('open'))));
+    await p.waitForFunction(() => document.querySelector('#sheet').classList.contains('open'), { timeout: 8000 }).catch(() => {});
+    const fromBox = await p.evaluate(() => ({ open: document.querySelector('#sheet').classList.contains('open'), hash: location.hash }));
+    ok(`${name}: tapping the box opens a pair out of it`, fromBox.open && fromBox.hash.length > 1, JSON.stringify(fromBox));
     await p.close();
 
     // a key skips it

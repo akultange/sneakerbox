@@ -18,8 +18,8 @@ const T = {
     h1a: 'რეალური წყვილები.',
     h1b: 'რეალური ფოტოები.',
     hint: touchFirst
-      ? 'თითი გადაატარე კედელს და სინათლე ფერს გაჩვენებს. შეეხე წყვილს, რომ ნახო ზომები და ფასი.'
-      : 'კურსორი გადაატარე კედელს და სინათლე ფერს გაჩვენებს. დააჭირე წყვილს, რომ ნახო ზომები და ფასი.',
+      ? 'თითი გადაატარე კედელს და სინათლე ფერს გაჩვენებს. შეეხე წყვილს, რომ ნახო ზომები და ფასი, ან გახსენი ყუთი.'
+      : 'კურსორი გადაატარე კედელს და სინათლე ფერს გაჩვენებს. დააჭირე წყვილს, რომ ნახო ზომები და ფასი, ან გახსენი ყუთი.',
     count: n => `${n} წყვილი კედელზე`,
     countBrand: (n, b) => `${b}: ${n} წყვილი`,
     countSize: (n, s, b) => `${b ? b + ', ' : ''}ზომა ${s}: ${n} წყვილი მარაგშია`,
@@ -45,7 +45,10 @@ const T = {
     copied: 'შეკვეთის ტექსტი დაკოპირდა. თუ Messenger-ში არ გამოჩნდა, ჩასვი.',
     soldOut: 'ამოიწურა',
     onFacebook: 'ეს წყვილი Facebook-ზე',
+    share: 'გაზიარება',
+    linkCopied: 'ბმული დაკოპირდა.',
     related: 'კიდევ ნახე',
+    openBox: 'გახსენი ყუთი: შემთხვევითი წყვილი',
     inStock: n => `${n} ზომა მარაგშია`,
     thumb: i => `ფოტო ${i}`,
     close: 'დახურვა',
@@ -58,8 +61,8 @@ const T = {
     h1a: 'Real pairs.',
     h1b: 'Real photos.',
     hint: touchFirst
-      ? 'Slide your finger across the wall and the light shows the color. Tap a pair to see sizes and price.'
-      : 'Move across the wall and the light shows the color. Click a pair to see sizes and price.',
+      ? 'Slide your finger across the wall and the light shows the color. Tap a pair to see sizes and price, or open the box.'
+      : 'Move across the wall and the light shows the color. Click a pair to see sizes and price, or open the box.',
     count: n => `${n} pairs on the wall`,
     countBrand: (n, b) => `${b}: ${n} ${n === 1 ? 'pair' : 'pairs'}`,
     countSize: (n, s, b) => `${b ? b + ', ' : ''}size ${s}: ${n} ${n === 1 ? 'pair' : 'pairs'} in stock`,
@@ -85,7 +88,10 @@ const T = {
     copied: 'Order text copied. If it is not in Messenger, paste it.',
     soldOut: 'sold out',
     onFacebook: 'This pair on Facebook',
+    share: 'Share',
+    linkCopied: 'Link copied.',
     related: 'More pairs',
+    openBox: 'Open the box: a random pair',
     inStock: (n, total) => `${n} of ${total} sizes in stock`,
     thumb: i => `Photo ${i}`,
     close: 'Close',
@@ -101,10 +107,22 @@ const t = (k, ...a) => { const v = T[lang][k]; return typeof v === 'function' ? 
 const name = p => p.model ? `${p.brand} ${p.model}` : p.brand;
 const price = p => `${p.price} ₾`;
 
-function applyLang() {
+// The box is printed in both languages: the current one on the front, the other on the back.
+const wallTitle = $('#wall-title'), tbAlt = $('#tb-alt');
+function printBox(el, l) {
+  const [a, b] = el.querySelectorAll('span');
+  if (a.textContent !== T[l].h1a) a.textContent = T[l].h1a;
+  if (b.textContent !== T[l].h1b) b.textContent = T[l].h1b;
+  el.classList.toggle('en', l === 'en');
+}
+function applyLang(keepFront = false) {
   html.lang = lang;
   // only touch text that changes: rewriting the same words counts as a new paint
-  document.querySelectorAll('[data-i18n]').forEach(el => { const v = t(el.dataset.i18n); if (el.textContent !== v) el.textContent = v; });
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    if (el.closest('.tb-front')) return;
+    const v = t(el.dataset.i18n); if (el.textContent !== v) el.textContent = v;
+  });
+  if (!keepFront) { printBox(wallTitle, lang); printBox(tbAlt, lang === 'ka' ? 'en' : 'ka'); }
   document.querySelectorAll('[data-i18n-label]').forEach(el => el.setAttribute('aria-label', t(el.dataset.i18nLabel)));
   $('#lang').textContent = t('langBtn');
   $('#lang').setAttribute('aria-label', t('langLabel'));
@@ -187,10 +205,12 @@ const S = {
   lx: 0, ly: 0, tx: 0, ty: 0, k: 0, tk: 0,              // light pos, target, intensity
   hover: -1, hide: -1, dim: 0, tdim: 0,
   mx: -1, my: -1, mouseIn: false, scrollAt: -1e9,     // the mouse pointer (viewport px), last scroll
+  breathAt: 0, breathUntil: 0, breaths: 0,             // the box's idle breath (a peek of light)
   hl: new Float32Array(MAX_CELLS),                      // per tile: the light's highlight, eased in and out
   lift: new Float32Array(MAX_CELLS), liftV: new Float32Array(MAX_CELLS),   // per tile: mouse lift, on a spring
   filter: 'all', size: null,
   filt: new Float32Array(MAX_CELLS), filtT: new Float32Array(MAX_CELLS),
+  filtAt: new Float64Array(MAX_CELLS), filtNext: new Float32Array(MAX_CELLS),   // a filter change travels as a wave
   hiReady: new Uint8Array(photos.length),
   touchHoldUntil: 0,
 };
@@ -223,6 +243,7 @@ uniform vec3 uView;            // count, scroll, top
 uniform vec3 uLight;           // x, y, radius (css px, stage space)
 uniform float uLightK, uHide, uDim;
 uniform vec2 uLift[8];         // lifted tiles: cell index, amount (biggest first)
+uniform vec4 uBuild;           // landing wave: origin x, y (wall px), time since it started (ms), speed (px/ms)
 uniform sampler2D uLo; uniform vec2 uLoGrid;
 uniform sampler2DArray uHi;
 uniform sampler2D uMeta;
@@ -266,6 +287,15 @@ void main(){
   // meta.a: how empty a slot of the box is. Scrolled on, its photos grow into place.
   float fill = 1.0 - meta.a;
   float sc = mix(0.86, 1.0, fill) * (1.0 + ${LIFT} * lift);
+  // landing: the wall builds out from the box, each tile growing in lit, then settling dark
+  float appear = 1.0, flash = 0.0;
+  if (uBuild.w > 0.0) {
+    float lp = clamp((uBuild.z - distance(cell * stepPx + tile * 0.5, uBuild.xy) / uBuild.w) / 620.0, 0.0, 1.0);
+    float x1 = lp - 1.0;
+    sc *= mix(0.55, 1.0, 1.0 + 2.70158 * x1 * x1 * x1 + 1.70158 * x1 * x1);
+    appear = smoothstep(0.0, 0.3, lp);
+    flash = lp > 0.0 ? 0.62 * (1.0 - smoothstep(0.12, 1.0, lp)) : 0.0;
+  }
   vec2 lc = (local - tile * 0.5) / sc + tile * 0.5;
 
   float d = distance(frag, uLight.xy);
@@ -282,13 +312,13 @@ void main(){
   float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
   vec3 dark = mix(vec3(lum), c, 0.10) * 0.27 + vec3(0.012, 0.013, 0.016);
   vec3 lit = clamp((c - 0.5) * 1.04 + 0.5, 0.0, 1.0);
-  float k = clamp(max(lightF, meta.g * 0.95) + hov * 0.3 + lift * 0.12, 0.0, 1.0);
+  float k = clamp(max(lightF, meta.g * 0.95) + hov * 0.3 + lift * 0.12 + flash, 0.0, 1.0);
   vec3 tileCol = mix(dark, lit, k);
 
   // rounded tile corners, antialiased
   vec2 q = abs(lc - tile * 0.5) - (tile * 0.5 - 5.0);
   float r = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - 5.0;
-  float edge = clamp(0.5 - r * sc * uDpr, 0.0, 1.0) * (inside ? fill : 0.0);
+  float edge = clamp(0.5 - r * sc * uDpr, 0.0, 1.0) * (inside ? fill * appear : 0.0);
 
   // the light also falls on the gaps, faintly, like on a real wall
   vec3 col = mix(bg + vec3(0.050, 0.044, 0.034) * lightF, tileCol, edge);
@@ -319,7 +349,7 @@ function initGL() {
   const loc = gl.getAttribLocation(prog, 'p');
   gl.enableVertexAttribArray(loc);
   gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-  for (const n of ['uRes', 'uDpr', 'uLayout', 'uView', 'uLight', 'uLightK', 'uHide', 'uDim', 'uLo', 'uLoGrid', 'uHi', 'uMeta', 'uLift'])
+  for (const n of ['uRes', 'uDpr', 'uLayout', 'uView', 'uLight', 'uLightK', 'uHide', 'uDim', 'uLo', 'uLoGrid', 'uHi', 'uMeta', 'uLift', 'uBuild'])
     U[n] = gl.getUniformLocation(prog, n);
 
   // low-res atlas: a 1x1 placeholder until it arrives
@@ -399,6 +429,16 @@ async function loadTextures() {
 }
 let loGrid = [16, 1], loReady = false;
 
+// The landing wave: armed when the box starts its flight (tiles hidden), it starts from the
+// box's slots as the box arrives and reaches the farthest tile on screen in about 0.9 s.
+let build = null;
+function armBuild(delay) {
+  const H = L.hole, x = H.w / 2, y = H.y - L.top + H.h / 2;
+  const far = Math.max(...[[-L.pad, -L.top], [L.w - L.pad, -L.top], [-L.pad, L.h - L.top], [L.w - L.pad, L.h - L.top]].map(([cx, cy]) => Math.hypot(cx - x, cy - y)));
+  build = { x, y, t0: performance.now() + delay, speed: far / 900, end: 900 + 640 };
+  invalidate();
+}
+
 function resize() {
   dpr = Math.min(devicePixelRatio || 1, 2);
   const w = stage.clientWidth, h = stage.clientHeight;
@@ -420,6 +460,9 @@ function draw() {
   gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, MAX_CELLS, 2, gl.RGBA, gl.UNSIGNED_BYTE, metaBuf);
   for (let j = 0; j < 8; j++) { liftU[j * 2] = j < liftN ? liftI[j] : 0; liftU[j * 2 + 1] = j < liftN ? liftK[j] : 0; }
   gl.uniform2fv(U.uLift, liftU);
+  const bt = build ? performance.now() - build.t0 : 0;
+  if (build && bt > build.end) build = null;
+  gl.uniform4f(U.uBuild, build ? build.x : 0, build ? build.y : 0, bt, build ? build.speed : 0);
   gl.uniform2f(U.uRes, canvas.width, canvas.height);
   gl.uniform1f(U.uDpr, dpr);
   gl.uniform4f(U.uLayout, L.pad, L.gap, L.tile, L.cols);
@@ -466,6 +509,7 @@ function frame(now) {
   if (Math.abs(S.lx - S.tx) + Math.abs(S.ly - S.ty) > 0.3 || Math.abs(S.k - S.tk) > 0.004 || Math.abs(S.dim - S.tdim) > 0.004) moving = true;
 
   for (let i = 0; i < L.count; i++) {
+    if (S.filtAt[i]) { if (now >= S.filtAt[i]) { S.filtT[i] = S.filtNext[i]; S.filtAt[i] = 0; } else moving = true; }
     const f = approach(S.filt[i], S.filtT[i], dt, 110);
     if (Math.abs(f - S.filtT[i]) > 0.004) moving = true;
     S.filt[i] = Math.abs(f - S.filtT[i]) > 0.004 ? f : S.filtT[i];
@@ -483,7 +527,11 @@ function frame(now) {
   // the mouse only: the tile under the pointer lifts. Nothing new lifts while the page
   // scrolls (like a browser's own hover), then the tile that ends up under it does.
   const lt = S.mouseIn && introLanded && !sheetPair && now - S.scrollAt > 140 ? cellAt(S.mx, S.my) : -1;
-  if (S.mouseIn) canvas.classList.toggle('over-tile', lt >= 0);
+  // the box: a mouse over it lifts the lid a crack; left alone, it breathes now and then
+  const overBox = S.mouseIn && lt < 0 && now - S.scrollAt > 140 && boxOpenable() && inBox(S.mx, S.my);
+  if (S.mouseIn) canvas.classList.toggle('over-tile', lt >= 0 || overBox);
+  if (idle && boxOpenable() && !overBox && now - S.breathAt > 9000 && S.breaths < 3) { S.breathAt = now; S.breaths++; breathe(); }
+  setPeek(overBox || now < S.breathUntil);
   const sdt = dt / 1000, ew = Math.exp(-LIFT_W * sdt);
   liftN = 0;
   for (let i = 0; i < L.count; i++) {
@@ -504,9 +552,10 @@ function frame(now) {
     if (x > 0.002) pushLift(i, x);
   }
 
-  placeLabel();
+  if (placeLabel(dt)) moving = true;
   lightBox();
   draw();
+  if (build) moving = true;
   if (moving || px !== S.lx) invalidate();
 }
 
@@ -568,6 +617,48 @@ function syncBox() {
   if (intro.classList.contains('gone') !== gone) intro.classList.toggle('gone', gone);
 }
 
+// ---------------------------------------------------------------- the box: peek, flip, open
+let peeking = false, boxBusy = false, boxPick = null;
+const boxOpenable = () => introLanded && !html.classList.contains('no-gl') && X.p < 0.25 && !sheetPair && !boxBusy;
+function inBox(x, y) { const r = boxRect(); return x >= r.left && x <= r.right && y >= r.top - r.height * 0.1 && y <= r.bottom; }
+function setPeek(on) { if (on !== peeking) { peeking = on; titleBox.classList.toggle('peek', on); } }
+function breathe() { S.breathUntil = performance.now() + 1300; setTimeout(invalidate, 1320); }
+const lidHinge = (deg, lift = 0) => {
+  const h = tbFly.offsetHeight, ld = $('.lid-left').offsetWidth;
+  return `translateY(${-h / 2 - lift}px) translateZ(${-ld / 2}px) rotateX(${deg}deg) translateZ(${ld / 2}px)`;
+};
+// the lid pops open with light, and shuts again
+function popLid(hold = 520) {
+  const from = peeking ? 12 : 0;
+  tbLid.animate([{ transform: lidHinge(from) }, { transform: lidHinge(46, 6), offset: 0.28 }, { transform: lidHinge(46, 6), offset: 0.28 + hold / 1500 }, { transform: lidHinge(0) }],
+    { duration: 1500, easing: 'cubic-bezier(.3,.7,.2,1)' });
+  $('.tb-spill').animate([{ opacity: 0 }, { opacity: 0.9, offset: 0.25 }, { opacity: 0.9, offset: 0.28 + hold / 1500 }, { opacity: 0 }], { duration: 1500 });
+  $('.tb-rim').animate([{ opacity: 0 }, { opacity: 1, offset: 0.2 }, { opacity: 1, offset: 0.3 + hold / 1500 }, { opacity: 0 }], { duration: 1500 });
+}
+// where a photo goes into (or comes out of) the box: the opening, just above its front edge
+function boxMouth() { const r = boxRect(), w = r.height * 0.42; return { x: (r.left + r.right) / 2 - w / 2, y: r.top - w * 0.72, w, h: w }; }
+// a tap on the box: a random pair comes out of it (in the size picked, if any)
+function openFromBox() {
+  if (opening || !boxOpenable()) return;
+  const fits = catalog.pairs.filter(p => matches(p) && p.id !== boxPick);
+  const pool = fits.length ? fits : catalog.pairs.filter(p => p.id !== boxPick);
+  const pick = pool[Math.floor(Math.random() * pool.length)];
+  boxPick = pick.id;
+  popLid();
+  setTimeout(() => openSheet(pick.id, pick.photos[0], boxMouth(), -1, true), 160);
+}
+// ENG / ქარ: the box comes forward, turns over to the side printed in the other language, and goes back
+function flipBox(next, done) {
+  if (!boxOpenable() || document.hidden) return done();
+  boxBusy = true; setPeek(false);
+  printBox(tbAlt, next);
+  const d = $('.tb-right').offsetWidth, z0 = -d / 2;
+  // turning this way, the end label faces you halfway round
+  const key = o => { const b = Math.sin(Math.PI * o); return { transform: `translateZ(${(z0 + d * 0.42 * b).toFixed(1)}px) rotateX(${(-8 * b).toFixed(2)}deg) rotateY(${-180 * o}deg)`, offset: o }; };
+  const a = tbObj.animate([0, 0.25, 0.5, 0.75, 1].map(key), { duration: 1050, easing: 'cubic-bezier(.62,0,.32,1)' });
+  a.onfinish = a.oncancel = () => { done(); a.cancel(); boxBusy = false; invalidate(); };
+}
+
 // The wall's light falls on the box as it passes: a soft highlight on its face.
 const tbFront = $('.tb-front');
 let boxLit = 0;
@@ -585,15 +676,18 @@ function lightBox() {
 }
 
 // ---------------------------------------------------------------- label
-let labelFor = -1;
-function placeLabel() {
+// The name and price glide from tile to tile; the words swap with a short fade.
+let labelFor = -1, labX = 0, labY = 0, labOn = false;
+function placeLabel(dt) {
   const show = introLanded && S.hover >= 0 && S.hl[S.hover] > 0.35 && S.k > 0.4;
-  if (!show) { label.classList.remove('on'); return; }
+  if (!show) { if (labOn) { label.classList.remove('on'); labOn = false; } return false; }
   const cell = S.hover, photo = photos[layerOf(cell)], pair = pairs.get(photo.pair);
   if (labelFor !== cell) {
-    label.innerHTML = '';
-    label.append(document.createTextNode(name(pair)));
-    const b = document.createElement('b'); b.textContent = price(pair); label.append(b);
+    const words = document.createElement('span');
+    words.append(document.createTextNode(name(pair)));
+    const b = document.createElement('b'); b.textContent = price(pair); words.append(b);
+    label.replaceChildren(words);
+    if (labOn) words.animate([{ opacity: 0, transform: 'translateY(5px)' }, { opacity: 1, transform: 'none' }], { duration: 240, easing: 'cubic-bezier(.2,.8,.2,1)' });
     labelFor = cell;
   }
   const r = cellRect(cell), g = L.tile * LIFT * 0.5 * S.lift[cell];   // a lifted tile is a little bigger
@@ -601,8 +695,10 @@ function placeLabel() {
   let x = r.x - g + 8, y = r.y + r.h + g - lh - 8;
   x = Math.min(Math.max(8, x), L.w - lw - 8);
   y = Math.min(Math.max(64, y), innerHeight - lh - 80);
-  label.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`;
-  label.classList.add('on');
+  if (!labOn) { labX = x; labY = y; labOn = true; label.classList.add('on'); }
+  else { labX = approach(labX, x, dt, 55); labY = approach(labY, y, dt, 55); }
+  label.style.transform = `translate3d(${labX.toFixed(1)}px, ${labY.toFixed(1)}px, 0)`;
+  return Math.abs(labX - x) + Math.abs(labY - y) > 0.4;
 }
 
 // ---------------------------------------------------------------- input
@@ -641,6 +737,7 @@ canvas.addEventListener('pointerup', e => {
   if (moved < 12 && held < 600) {
     const i = cellAt(e.clientX, e.clientY);
     if (i >= 0) openFromCell(i);
+    else if (inBox(e.clientX, e.clientY) && boxOpenable()) openFromBox();
   }
 });
 
@@ -699,7 +796,7 @@ function renderFilters() {
     chip.setAttribute('aria-pressed', String(S.filter === b));
     // with a size picked, a brand that has nothing in it can't be chosen: no dark dead end
     chip.disabled = b !== 'all' && S.size != null && !catalog.pairs.some(p => p.brand === b && inStock(p, S.size));
-    chip.addEventListener('click', () => applyFilter(b));
+    chip.addEventListener('click', () => applyFilter(b, false, centreOf(chip)));
     filters.append(chip);
   }
   renderSizePop();
@@ -735,11 +832,12 @@ function closeSizePop(refocus = false) {
   $('#size-chip')?.setAttribute('aria-expanded', 'false');
   if (refocus) $('#size-chip')?.focus({ preventScroll: true });
 }
+const centreOf = el => { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
 function setSize(s) {
   S.size = s;
   closeSizePop();
   renderFilters();
-  applyFilter(S.filter);
+  applyFilter(S.filter, false, $('#size-chip') ? centreOf($('#size-chip')) : null);
   $('#size-chip')?.focus({ preventScroll: true });
 }
 $('#size-clear').addEventListener('click', () => setSize(null));
@@ -747,13 +845,20 @@ document.addEventListener('pointerdown', e => {
   if (sizePop.classList.contains('open') && !sizePop.contains(e.target) && !e.target.closest('#size-chip')) closeSizePop();
 });
 
-function applyFilter(b, instant = false) {
+// A filter change spreads across the wall as a wave of light from the chip that was pressed.
+function applyFilter(b, instant = false, from = null) {
   S.filter = b;
-  const active = b !== 'all' || S.size != null;
+  const active = b !== 'all' || S.size != null, now = performance.now();
   for (let i = 0; i < MAX_CELLS; i++) {
-    const on = active && i < L.count && matches(pairs.get(photos[layerOf(i)].pair));
-    S.filtT[i] = on ? 1 : 0;
-    if (instant) S.filt[i] = S.filtT[i];
+    const on = active && i < L.count && matches(pairs.get(photos[layerOf(i)].pair)) ? 1 : 0;
+    if (instant || !from || i >= L.count) {
+      S.filtT[i] = on; S.filtAt[i] = 0;
+      if (instant) S.filt[i] = on;
+      continue;
+    }
+    const r = cellRect(i);
+    S.filtNext[i] = on;
+    S.filtAt[i] = now + Math.min(650, Math.hypot(r.x + r.w / 2 - from.x, r.y + r.h / 2 - from.y) / 1.5);
   }
   filters.querySelectorAll('.chip[data-brand]').forEach(c => c.setAttribute('aria-pressed', String(c.dataset.brand === b)));
   // the plain grid (no WebGL) shows the same thing: matching photos in colour
@@ -770,6 +875,10 @@ function renderCount() {
 // accessible list of pairs (screen readers, keyboard)
 function renderPairList() {
   const ul = $('#pair-list'); ul.innerHTML = '';
+  const li0 = document.createElement('li'), bx = document.createElement('button');
+  bx.type = 'button'; bx.textContent = t('openBox');
+  bx.addEventListener('click', () => { if (boxOpenable()) openFromBox(); });
+  li0.append(bx); ul.append(li0);
   for (const p of catalog.pairs) {
     const li = document.createElement('li'), b = document.createElement('button');
     b.type = 'button';
@@ -798,7 +907,7 @@ const isCellVisible = i => { const r = cellRect(i); return r.y > 40 && r.y + r.h
 // tablet width up. The photo flies from its place on the wall into the window and back.
 const sheet = $('#sheet'), sheetWin = $('#sheet-win'), sheetBackdrop = $('#sheet-backdrop'), sheetBody = $('#sheet-body');
 const gallery = $('#gallery'), thumbs = $('#gallery-thumbs'), sheetLid = $('#sheet-lid');
-let sheetPair = null, sheetKey = null, sheetCell = -1, pickedSize = null, lastFocus = null, opening = null;
+let sheetPair = null, sheetKey = null, sheetCell = -1, pickedSize = null, lastFocus = null, opening = null, sheetFromBox = false;
 let sheetAnims = [];
 const windowed = () => matchMedia('(min-width: 760px)').matches;
 const sheetRun = (el, keyframes, opts) => { const a = el.animate(keyframes, opts); sheetAnims.push(a); return a; };
@@ -806,7 +915,7 @@ const sheetRun = (el, keyframes, opts) => { const a = el.animate(keyframes, opts
 function pictureFor(key, eager) {
   const pic = document.createElement('picture');
   pic.style.backgroundImage = `url(${tileURL(key)})`;
-  const sizes = '(min-width: 1000px) 720px, (min-width: 760px) 620px, 100vw';
+  const sizes = '(min-width: 1000px) 1080px, (min-width: 760px) 620px, 100vw';   // wide: sharp enough for the lens
   const set = ext => [480, 720, 1080].map(s => `assets/img/p/${key}-${s}.${ext} ${s}w`).join(', ');
   const src = document.createElement('source');
   src.type = 'image/avif'; src.srcset = set('avif'); src.sizes = sizes;
@@ -856,7 +965,7 @@ function fillSheet(pairId, key, resetSize = true) {
     b.disabled = sold;
     if (sold) b.setAttribute('aria-label', `${s}, ${t('soldOut')}`);
     b.setAttribute('aria-pressed', String(pickedSize === s));
-    b.addEventListener('click', () => { pickedSize = s; fillSizesState(); });
+    b.addEventListener('click', () => { pickedSize = s; fillSizesState(); ignite(); navigator.vibrate?.(8); });
     box.append(b);
   }
   fillSizesState();
@@ -930,6 +1039,31 @@ function updateCount() {
 }
 gallery.addEventListener('scroll', updateCount, { passive: true });
 
+// the order button lights up once there is a size to order
+function ignite() { const o = $('#order'); o.classList.remove('ignite'); void o.offsetWidth; o.classList.add('ignite'); }
+
+// a lens on the photo with a mouse: it zooms in where the pointer is and follows it
+const lensOK = matchMedia('(min-width: 1000px) and (hover: hover)');
+let zoomed = null;
+const unzoom = () => { if (zoomed) { zoomed.classList.remove('zoom'); zoomed = null; } };
+gallery.addEventListener('pointermove', e => {
+  if (e.pointerType !== 'mouse' || !lensOK.matches || opening) return;
+  const pic = e.target.closest('picture'); if (!pic) return;
+  const r = pic.getBoundingClientRect(), img = pic.querySelector('img');
+  img.style.transformOrigin = `${((e.clientX - r.left) / r.width * 100).toFixed(1)}% ${((e.clientY - r.top) / r.height * 100).toFixed(1)}%`;
+  if (zoomed !== pic) { unzoom(); zoomed = pic; pic.classList.add('zoom'); }
+});
+gallery.addEventListener('pointerleave', unzoom);
+gallery.addEventListener('scroll', unzoom, { passive: true });
+
+// share a pair: the phone's share sheet, or the link copied on a computer
+$('#sheet-share').addEventListener('click', async () => {
+  const p = pairs.get(sheetPair); if (!p) return;
+  const url = location.origin + location.pathname + '#' + p.id;
+  if (navigator.share && touchFirst) { try { await navigator.share({ title: `${name(p)} • Sneakerbox`, text: `${name(p)}, ${price(p)}`, url }); } catch {} return; }
+  try { await navigator.clipboard.writeText(url); toast(t('linkCopied')); } catch { toast(url); }
+});
+
 $('#order').addEventListener('click', async e => {
   if (!pickedSize) {
     e.preventDefault();
@@ -948,8 +1082,31 @@ function openFromCell(i) {
   openSheet(photo.pair, photo.key, { x: r.x - g, y: r.y - g, w: r.w + 2 * g, h: r.h + 2 * g }, i);
 }
 
-function openSheet(pairId, key, fromRect, cell = -1) {
+// The photo in flight between the wall (or the box) and the window. x and y are eased
+// differently so it travels on a slight arc, and it casts a shadow as it lifts mid-way.
+function flyPhoto(key, from, to, duration, radius = ['5px', '0px'], fadeOut = false) {
+  const big = from.w >= to.w ? from : to;
+  const outer = document.createElement('div'), inner = document.createElement('div');
+  outer.className = 'flyer'; inner.className = 'flyer-in';
+  Object.assign(inner.style, { width: big.w + 'px', height: big.h + 'px' });
+  const img = new Image(); img.src = tileURL(key); img.alt = '';
+  inner.append(img); outer.append(inner); document.body.append(outer);
+  const anims = [
+    outer.animate([{ transform: `translateX(${from.x}px)` }, { transform: `translateX(${to.x}px)` }], { duration, easing: 'cubic-bezier(.42,.05,.18,1)' }),
+    inner.animate([
+      { transform: `translateY(${from.y}px) scale(${from.w / big.w})`, borderRadius: radius[0] },
+      { transform: `translateY(${to.y}px) scale(${to.w / big.w})`, borderRadius: radius[1] },
+    ], { duration, easing: 'cubic-bezier(.2,.78,.15,1)' }),
+    inner.animate([{ boxShadow: '0 0 0 rgba(0,0,0,0)' }, { boxShadow: '0 24px 48px rgba(0,0,0,.5)', offset: 0.45 }, { boxShadow: '0 0 0 rgba(0,0,0,0)' }], { duration }),
+  ];
+  if (fadeOut) anims.push(outer.animate([{ opacity: 1 }, { opacity: 1, offset: 0.72 }, { opacity: 0 }], { duration }));
+  const done = new Promise(r => { anims[0].onfinish = anims[0].oncancel = r; }).then(() => outer.remove());
+  return { done, finish: () => anims.forEach(a => a.finish()) };
+}
+
+function openSheet(pairId, key, fromRect, cell = -1, fromBox = false) {
   if (opening) return;
+  sheetFromBox = fromBox;
   closeSizePop();
   sheetAnims.forEach(a => a.cancel()); sheetAnims = [];
   lastFocus = document.activeElement;
@@ -980,19 +1137,12 @@ function openSheet(pairId, key, fromRect, cell = -1) {
     [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'none' }],
     { duration: 320, delay: 200 + i * 35, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'backwards' }));
   if (!fromRect || !target) return;
-  // the photo flies from its place on the wall into the window
-  const fly = document.createElement('div');
-  fly.className = 'flyer';
-  Object.assign(fly.style, { width: to.width + 'px', height: to.height + 'px' });
-  const img = new Image(); img.src = tileURL(key); img.alt = '';
-  fly.append(img); document.body.append(fly);
+  // the photo flies from its place on the wall (or out of the box) into the window
   target.style.visibility = 'hidden';
   S.hide = cell; invalidate();
-  opening = fly.animate([
-    { transform: `translate(${fromRect.x}px, ${fromRect.y}px) scale(${fromRect.w / to.width})`, borderRadius: '5px' },
-    { transform: `translate(${to.left}px, ${to.top}px) scale(1)`, borderRadius: '0px' },
-  ], { duration: win ? 580 : 520, easing: 'cubic-bezier(.2,.75,.15,1)' });
-  opening.onfinish = opening.oncancel = () => { target.style.visibility = ''; fly.remove(); opening = null; };
+  const f = flyPhoto(key, fromRect, { x: to.left, y: to.top, w: to.width, h: to.height }, win ? 620 : 560);
+  opening = f;
+  f.done.then(() => { target.style.visibility = ''; if (opening === f) opening = null; });
 }
 
 function closeSheet(fromHistory = false) {
@@ -1000,8 +1150,9 @@ function closeSheet(fromHistory = false) {
   if (opening) opening.finish();
   const cur = gallery.children[Math.round(gallery.scrollLeft / Math.max(1, gallery.clientWidth))];
   const backCell = sheetCell >= 0 && isCellVisible(sheetCell) && cur === gallery.firstElementChild ? sheetCell : -1;
+  const intoBox = sheetFromBox && cur === gallery.firstElementChild && introLanded && X.p < 0.25 && !html.classList.contains('no-gl');
   const key = sheetKey, dragged = sheetWin.style.transform || 'none';
-  sheetPair = null; sheetCell = -1;
+  sheetPair = null; sheetCell = -1; sheetFromBox = false;
   sheetAnims.forEach(a => a.cancel()); sheetAnims = [];
   sheet.setAttribute('aria-hidden', 'true');
   html.style.overflow = '';
@@ -1012,19 +1163,19 @@ function closeSheet(fromHistory = false) {
   const done = () => { if (sheetPair) return; sheetAnims.forEach(a => a.cancel()); sheetAnims = []; sheet.classList.remove('open'); sheetWin.style.transform = ''; };
 
   const win = windowed();
-  // the photo flies back to its place on the wall
+  // the photo flies back to its place on the wall, or back into the box it came out of
   if (backCell >= 0 && cur) {
     const from = cur.getBoundingClientRect(), to = cellRect(backCell);
-    const fly = document.createElement('div');
-    fly.className = 'flyer';
-    Object.assign(fly.style, { width: from.width + 'px', height: from.height + 'px' });
-    const img = new Image(); img.src = tileURL(key); img.alt = '';
-    fly.append(img); document.body.append(fly);
     cur.style.visibility = 'hidden';
-    fly.animate([
-      { transform: `translate(${from.left}px, ${from.top}px) scale(1)`, borderRadius: '0px' },
-      { transform: `translate(${to.x}px, ${to.y}px) scale(${to.w / from.width})`, borderRadius: '5px' },
-    ], { duration: 420, easing: 'cubic-bezier(.3,.6,.2,1)' }).onfinish = () => { fly.remove(); cur.style.visibility = ''; S.hide = -1; invalidate(); };
+    flyPhoto(key, { x: from.left, y: from.top, w: from.width, h: from.height }, to, 460, ['0px', '5px'])
+      .done.then(() => { cur.style.visibility = ''; S.hide = -1; invalidate(); });
+  } else if (intoBox && cur) {
+    const from = cur.getBoundingClientRect();
+    cur.style.visibility = 'hidden';
+    popLid(220);
+    S.hide = -1; invalidate();
+    flyPhoto(key, { x: from.left, y: from.top, w: from.width, h: from.height }, boxMouth(), 520, ['0px', '6px'], true)
+      .done.then(() => { cur.style.visibility = ''; });
   } else {
     S.hide = -1; invalidate();
   }
@@ -1097,9 +1248,12 @@ function toast(msg) {
 
 // ---------------------------------------------------------------- language
 $('#lang').addEventListener('click', () => {
-  lang = lang === 'ka' ? 'en' : 'ka';
-  try { localStorage.setItem('sb-lang', lang); } catch {}
-  applyLang();
+  if (boxBusy) return;
+  const next = lang === 'ka' ? 'en' : 'ka';
+  try { localStorage.setItem('sb-lang', next); } catch {}
+  lang = next;
+  applyLang(true);                                      // everything at once, except the box: it turns over
+  flipBox(next, () => applyLang());
 });
 
 // ---------------------------------------------------------------- no WebGL: plain grid
@@ -1136,11 +1290,40 @@ const introAnims = [], introWaits = [];
 const tbFly = $('#tb-fly'), tbObj = $('#tb-obj'), tbLid = $('#tb-lid');
 const SPIN_MS = 2800;                                  // one turn of the loader (matches the CSS)
 
+// The loader: a barcode prints one bar per photo (at most 40) and the count rolls like an odometer.
+const tbCode = $('#tb-code'), tbScan = $('#tb-scan'), tbCount = $('#tb-count'), tbLoad = $('#tb-load');
+const BARS = Math.min(photos.length, 40), bars = [];
+const rollCols = [];
+(function buildLoader() {
+  // a fixed, uneven rhythm of thin and thick bars, so it reads like a real code
+  const W = [1, 2, 1, 3, 1, 1, 2, 3, 1, 2, 1, 1], G = [2, 1, 3, 1, 2, 1, 1, 2, 3, 1, 2];
+  for (let i = 0; i < BARS; i++) {
+    const b = document.createElement('b');
+    b.style.width = W[i % W.length] + 'px';
+    if (i < BARS - 1) b.style.marginRight = G[(i * 5) % G.length] + 'px';
+    if (i < 2 || i >= BARS - 2 || Math.abs(i - (BARS - 1) / 2) < 1) b.className = 'g';
+    tbCode.insertBefore(b, tbScan); bars.push(b);
+  }
+  const digits = Math.max(2, String(photos.length).length);
+  const roll = $('#tb-roll');
+  for (let d = 0; d < digits; d++) {
+    const col = document.createElement('i'), strip = document.createElement('b');
+    for (let k = 0; k < 10; k++) { const s = document.createElement('span'); s.textContent = k; strip.append(s); }
+    col.append(strip); roll.append(col); rollCols.push(strip);
+  }
+  $('#tb-of').textContent = ` / ${photos.length}`;
+  $('#tag-sizes').textContent = `${allSizes[0]}–${allSizes[allSizes.length - 1]}`;
+  $('#tag-pairs').textContent = catalog.pairs.length;
+})();
+
 function introProgress(n) {
   introLoaded = n;
   if (introDone) return;
-  $('#tb-count').textContent = `${n} / ${photos.length}`;
-  $('#tb-bar').style.transform = `scaleX(${n / photos.length})`;
+  tbCount.dataset.n = `${n} / ${photos.length}`;
+  const s = String(n).padStart(rollCols.length, '0');
+  rollCols.forEach((col, d) => { col.style.transform = `translateY(${-Number(s[d])}em)`; });
+  const lit = Math.round(n / photos.length * BARS);
+  bars.forEach((b, i) => b.classList.toggle('on', i < lit));
 }
 
 const introWait = ms => new Promise(r => {
@@ -1165,6 +1348,7 @@ function introGate() {
 
 function skipIntro() {
   introSkip = true;
+  build = null;
   introWaits.splice(0).forEach(f => f());
   introAnims.forEach(a => a.finish());
 }
@@ -1190,11 +1374,20 @@ async function playIntro() {
     return a;
   };
 
-  // 1. catch the spin where it is
+  // 0. the barcode is complete: a scanner line reads it, and the loader steps back as the lid opens
+  bars.forEach(b => b.classList.add('on'));
+  run(tbScan, [{ transform: 'translateX(0)', opacity: 0 }, { opacity: 1, offset: 0.12 }, { opacity: 1, offset: 0.86 }, { transform: `translateX(${tbCode.offsetWidth + 2}px)`, opacity: 0 }],
+    { duration: 460, easing: 'cubic-bezier(.45,0,.3,1)' });
+  run(tbLoad, [{ opacity: 1 }, { opacity: 0 }], { duration: 260, delay: 520, easing: 'linear' });
+
+  // 1. catch the spin where it is (and the shadow turning with it)
   const spin = tbObj.getAnimations()[0];
   const ang = spin && spin.currentTime != null ? (Number(spin.currentTime) % SPIN_MS) / SPIN_MS * 360 : 0;
+  const shadow = $('.tb-shadow'), shadowScale = getComputedStyle(shadow).scale;
   tbObj.style.animation = 'none';
   tbObj.style.transform = objT(-20, ang);
+  shadow.style.animation = 'none';
+  run(shadow, [{ scale: shadowScale === 'none' ? '1 1' : shadowScale, opacity: 1 }, { scale: '1 1', opacity: 1 }], { duration: 700, easing: 'cubic-bezier(.3,.6,.2,1)' });
 
   // 2. slow to face front, leaving the spin at the speed it had; the lid lifts and light spills
   const target = 360 * Math.ceil((ang + 70) / 360), R = target - ang;
@@ -1216,6 +1409,7 @@ async function playIntro() {
   const T = tbFly.getBoundingClientRect();
   const from = `translate(${F.left - T.left}px, ${F.top - T.top}px) scale(${F.width / T.width})`;
   const FLY = 1000, ease = 'cubic-bezier(.62,.02,.2,1)';
+  if (!introSkip) armBuild(FLY * 0.62);                  // the wall builds out as the box arrives
   run(tbFly, [{ transform: from }, { transform: 'none' }], { duration: FLY, easing: ease });
   run(tbObj, [{ transform: objT(-16, target) }, { transform: objT(0, target) }], { duration: FLY, easing: ease });
   run(tbLid, [{ transform: lidT(LIFT, 14) }, { transform: lidT(0, 0) }], { duration: 620, delay: 180, easing: 'cubic-bezier(.55,0,.3,1)' });
@@ -1237,7 +1431,7 @@ function releaseLight(x, y) {
 
 function finishIntro() {
   introAnims.splice(0).forEach(a => a.cancel());       // the CSS rest pose takes over, identical
-  tbObj.style.transform = ''; tbObj.style.animation = '';
+  tbObj.style.transform = ''; tbObj.style.animation = ''; $('.tb-shadow').style.animation = '';
   html.classList.remove('intro');
   introDone = introLanded = true;
   // skipped: everything shows at once; played: the staggered fades finish first

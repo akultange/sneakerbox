@@ -4,11 +4,15 @@ Spec demo for [Sneakerbox](https://www.facebook.com/sneakerboxonlineshop). Live 
 
 The shop's own on-foot photos form a dark wall. Light follows the finger (or cursor) and shows the colour; tap a pair for its price, the sizes in stock and an order that opens in their Messenger with the text already written. Pick a size and only the pairs in stock in that size light up. Georgian first, with an English toggle.
 
-The headline is printed on the shop's own box (the red creased paper and cream wordmark from their logo), which takes three slots of the wall. On every open the box turns while the photos load, the lid lifts with light inside, and the box slides into its slots as that light starts drifting over the wall. A tap or a key skips it; shared pair links go straight to the pair. Scroll down and the box goes back into the wall while three more pairs fill its slots; scroll back up and it comes out again.
+The headline is printed on the shop's own box (the red creased paper and cream wordmark from their logo), which takes three slots of the wall. Georgian is printed on the front and English on the back; the language button turns the box over.
 
-With a mouse, the tile under the pointer lifts a little off the wall and settles back on the same spring when the pointer moves on.
+On every open the box drops onto a lit stage and turns while the photos load. You catch its end label as it turns (Sneakerbox, Tbilisi, EU sizes, pair count). Under it a barcode prints one bar per photo, with a rolling count. When the code is complete a scanner line reads it, the lid lifts with light inside, and the box flies into its slots. The wall then builds out from the box in a wave of light. A tap or a key skips the intro; shared pair links go straight to the pair.
 
-Tap a pair and it opens in a window over the wall (a bottom sheet on phones): the photo flies from its tile into the window, with the sizes in stock, the order button and three more pairs to look at.
+The box is a button too: with a mouse its lid lifts a crack and light leaks out, and left alone it breathes now and then. Tap it and the lid pops open: a random pair comes out into the window (in the size picked, if any) and goes back into the box when the window closes. Scroll down and the box goes back into the wall while three more pairs fill its slots; scroll back up and it comes out again.
+
+With a mouse, the tile under the pointer lifts a little off the wall and settles back on the same spring when the pointer moves on. Picking a size or brand sends the light across the wall as a wave from the chip, and the name and price label glides from tile to tile.
+
+Tap a pair and it opens in a window over the wall (a bottom sheet on phones). The photo flies in from its tile on a slight arc. The window has a lens on the photo with a mouse, the sizes in stock, a share button (the share sheet on phones, the link copied on a computer), the order button that lights up once a size is picked, and three more pairs to look at.
 
 Prices are estimates from Tbilisi resellers and the sizes are placeholders until the shop sends its stock list.
 
